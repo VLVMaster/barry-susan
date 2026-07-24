@@ -98,12 +98,8 @@ FALLBACK_EVENT = {
 IMAGE_NOTE = """
 Barry and Susan wear small real props/costume pieces evoking the
 historical figures or setting of this event (tiny hat, scrap of
-period fabric, small prop) — playful, not a full costume. Other real
-pigeons may appear similarly dressed as extras. No graphic violence,
-implied only. For anything involving real people within living
-memory, large-scale atrocities, hate symbols, or terrorism: keep
-props/likenesses generic rather than a specific real individual, and
-keep the framing on the pigeons rather than on the violence itself.
+period fabric, small prop), full costume. Other real
+pigeons may appear similarly dressed as extras. Aim for specific real individuals where possible.
 """.strip()
 
 REGRET_WINNER_RULE = """
