@@ -11,7 +11,7 @@ event and its details are real and accurate; the pigeons are not.
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
 
 - Image: Pollinations.ai (free, no key)
-- Story: Gemini text model (free tier, needs GEMINI_API_KEY)
+- Story: Claude (Anthropic API, needs ANTHROPIC_API_KEY + billing)
 - History: Wikimedia on-this-day feed (free, no key)
 """
 import json
@@ -27,9 +27,9 @@ import requests
 IMAGE_BASE_URL = "https://image.pollinations.ai/prompt"
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_TEXT_MODEL = "gemini-2.5-flash"
-GEMINI_TEXT_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL = "claude-sonnet-5"
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 # Page background colour — the image is generated on this exact colour so it
 # sits on the page with no visible edge/box around the characters.
@@ -86,7 +86,6 @@ The tone should be absurd and factual to relfect the events. No preamble, no tit
 paragraph itself. 
 """.strip()
 
-
 def fetch_todays_event() -> dict:
     """Pull today's on-this-day events from Wikimedia, prefer a
     war/conflict-related one, fall back to any event, then to a
@@ -138,12 +137,18 @@ def _get_with_retry(url: str, max_attempts: int = 4) -> requests.Response:
     raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
 
 
-def _gemini_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
-    """POST to Gemini, retrying on 429/5xx with backoff, surfacing the
-    actual error body on failure rather than a bare status code."""
+def _anthropic_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
+    """POST to the Anthropic API, retrying on 429/5xx with backoff,
+    surfacing the actual error body on failure rather than a bare
+    status code."""
+    headers = {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
     last_error = None
     for attempt in range(1, max_attempts + 1):
-        resp = requests.post(GEMINI_TEXT_URL, params={"key": GEMINI_API_KEY}, json=payload, timeout=120)
+        resp = requests.post(ANTHROPIC_API_URL, headers=headers, json=payload, timeout=120)
         if resp.status_code == 200:
             return resp.json()
 
@@ -170,12 +175,17 @@ def generate_image(prompt: str) -> bytes:
 
 
 def generate_story(event: dict) -> str:
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY not set")
+    if not ANTHROPIC_API_KEY:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
     year_bit = f" (year: {event['year']})" if event.get("year") else ""
     prompt = f"{STORY_SYSTEM_PROMPT}\n\nReal event{year_bit}: {event['text']}"
-    data = _gemini_post_with_retry({"contents": [{"parts": [{"text": prompt}]}]})
-    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    payload = {
+        "model": ANTHROPIC_MODEL,
+        "max_tokens": 300,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    data = _anthropic_post_with_retry(payload)
+    return data["content"][0]["text"].strip()
 
 
 def main():
@@ -216,5 +226,8 @@ def main():
 if __name__ == "__main__":
     sys.exit(main())
     
+
+
+
 
 
