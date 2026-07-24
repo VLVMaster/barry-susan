@@ -25,7 +25,6 @@ jobs:
       - name: Generate today's image
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python generate.py
 
       - name: Commit and push
