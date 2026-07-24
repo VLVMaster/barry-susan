@@ -3,9 +3,14 @@
 Generates today's Barry & Susan illustration + story, based on a real
 "on this day in history" event pulled from Wikipedia.
 
+Barry and Susan are dressed in attire appropriate to the event's era
+and appear as witnesses/onlookers to it. They are never depicted as,
+or made to resemble, any specific real historical individual — the
+event and its details are real and accurate; the pigeons are not.
+
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
 
-- Image: Hugging Face Inference API (free tier, needs HF_TOKEN)
+- Image: Pollinations.ai (free, no key)
 - Story: Groq (free tier, no credit card, needs GROQ_API_KEY)
 - History: Wikimedia on-this-day feed (free, no key)
 """
@@ -14,30 +19,26 @@ import os
 import random
 import sys
 import time
+import urllib.parse
 from datetime import date, datetime, timezone
 
 import requests
 
-# Pollinations.ai's anonymous image endpoint bare-404'd, and its
-# successor (gen.pollinations.ai/image with a pk_ App Key) turned out to
-# require a funded balance, not actually free. Hugging Face's Inference
-# API is genuinely free (no payment required) at the cost of needing an
-# HF_TOKEN and occasional cold-start waits. HF retired the old
-# api-inference.huggingface.co host in favor of a router that dispatches
-# to a chosen inference provider.
-HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
-HF_IMAGE_API_URL = f"https://router.huggingface.co/hf-inference/models/{HF_IMAGE_MODEL}"
-HF_TOKEN = os.environ.get("HF_TOKEN")
+IMAGE_BASE_URL = "https://pollinations.ai/p"
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+# Page background colour — the image is generated on this exact colour so it
+# sits on the page with no visible edge/box around the characters.
+PAGE_BACKGROUND_HEX = "#F5EFE1"
+
 # Bias event selection toward war/conflict when possible, per preference —
 # falls back to any event on days where nothing matches.
 CONFLICT_KEYWORDS = [
-    "invasion", "massacre", "revolution", "assassinat",
+    "war", "battle", "invasion", "massacre", "revolution", "assassinat",
     "coup", "siege", "bombing", "genocide", "uprising", "rebellion",
     "military", "army", "troops", "conquest", "occupation", "riot",
 ]
@@ -45,24 +46,48 @@ CONFLICT_KEYWORDS = [
 # Fixed character description — repeated every single call.
 # Consistency comes from restating this every time, not from the model remembering.
 CHARACTER_BASE = """
-Photorealistic photo, not illustration or painting. Two real pigeons,
-Barry and Susan, each with a small handwritten name tag on a string
-around its neck reading BARRY or SUSAN — that's how they're told
-apart, since real pigeons otherwise look alike. Same two pigeons,
-same tags, every time.
+Photorealistic photo, not illustration. Two real pigeons, each with
+a small handwritten tag on a string around its neck: one reads
+BARRY, one reads SUSAN. Same two pigeons, same tags, every time.
 """.strip()
 
-IMAGE_SYSTEM_NOTE = """
-Barry and Susan are physically present in the scene, right in among
-the real historical event, as if actually photographed there.
-the real historical event, as if actually photographed there — not
-off to the side, not a small background detail, genuinely part of
-the shot. They may wear small real props/costume pieces evoking the
-event or figures involved (a tiny hat, a scrap of period fabric) —
-playful, not a full costume. The rest of the scene (people, setting,
-architecture) is real and photographically plausible for the time
-and place. No graphic violence, implied only. Keep any real recent
-individual's likeness generic rather than exact.
+PHOTO_ERA_PRE_PHOTOGRAPHY = """
+Photography didn't exist yet — style as a damaged, aged sepia
+tintype photo, anachronistic but photographically real-looking.
+""".strip()
+
+PHOTO_ERA_EARLY_PHOTO = """
+Style as a genuine black-and-white or sepia photo typical of this
+era — period-correct grain and tone.
+""".strip()
+
+PHOTO_ERA_MODERN = """
+Style as a real photo for the decade — black-and-white or faded film
+for mid-1900s, natural full colour for recent decades.
+""".strip()
+
+
+def photo_era_note(event: dict) -> str:
+    """Picks a photographic treatment matching the real history of
+    photography — the joke does double duty as a consistency device."""
+    year = event.get("year")
+    if year is None:
+        return PHOTO_ERA_MODERN
+    if year < 1850:
+        return PHOTO_ERA_PRE_PHOTOGRAPHY
+    if year < 1950:
+        return PHOTO_ERA_EARLY_PHOTO
+    return PHOTO_ERA_MODERN
+
+
+COMIC_DEVICES_RULE = """
+No cartoon speech bubbles — this is a photo. Text only where
+plausible in-scene (a sign, a placard, the name tags).
+""".strip()
+
+BACKGROUND_RULE = """
+Real, physically plausible setting for the event, natural
+photographic depth of field.
 """.strip()
 
 FALLBACK_EVENT = {
@@ -70,57 +95,98 @@ FALLBACK_EVENT = {
     "text": "just an ordinary day, nothing of note recorded",
 }
 
-LOCATION_RULE = """
-Also add one more line, before REGRET/WINNER, in this exact format:
-LOCATION: <the specific real place this event happened, as a
-geocodable name — e.g. "Ypres, Belgium" or "Nocera, Italy" — as
-precise as is actually known, city/town level where possible>
+IMAGE_NOTE = """
+Barry and Susan wear small real props/costume pieces evoking the
+historical figures or setting of this event (tiny hat, scrap of
+period fabric, small prop), full costume. Other real
+pigeons may appear similarly dressed as extras. Aim for specific real individuals where possible.
 """.strip()
 
 REGRET_WINNER_RULE = """
 After the paragraph, add exactly two more lines in this exact format:
-REGRET: <a percentage 0-100>|<one short deadpan line about the hindsight regret involved>
+REGRET: <a percentage 0-100>|<one short witty line about the hindsight regret involved>
 WINNER: <one short line answering "who really won this?">
 
-REGRET: base the percentage and remark on how much regret the people
-involved arguably should feel in hindsight, played completely
-straight-faced — often the people at the time felt none, which is
-itself the joke.
+For the REGRET line: base the percentage and remark on how much regret
+the people involved arguably should feel in hindsight, played for dry
+irony — often the actual historical figures felt none at the time,
+which is itself the joke.
 
-WINNER: almost never name an actual side, nation, or specific real
-person as the winner — that's the boring, obvious answer. Instead
-give a genuinely subversive, darkly funny answer about who or what
-actually came out ahead once the human cost is weighed honestly — an
-industry, an institution, a bureaucracy, an idea, the news cycle,
-nobody at all. Never attribute real personal financial gain or
-corruption to a specific real named individual — aim the joke at
-systems and institutions, not at accusing a real person of a crime.
+For the WINNER line, especially on any large-scale war or conflict:
+almost never name an actual side or nation as the winner — that's the
+boring, expected answer. Instead give a genuinely subversive, darkly
+witty answer about who or what actually came out ahead when the human
+cost is weighed honestly — an industry, an idea, a future generation
+of historians, arms manufacturers, bureaucracy, nobody at all. Think
+"the real winner was the war machine itself," not "France won." For
+smaller-scale or modern tragedies involving real identifiable victims,
+keep this line understated and somber rather than jokey — a short,
+genuine line like "No one. There's no winner in this one." is exactly
+right there; do not force a punchline onto real, recent grief.
 """.strip()
 
-STORY_SYSTEM_PROMPT = """
-You write a single paragraph (100-150 words) narrating a real
-historical event, in the voice of Barry and Susan — two pigeons who
-are right there in the middle of it, reacting to what's unfolding
-around them. Write in a distinctly British, Blackadder-style deadpan
-satirical voice: dry, straight-faced, understated, delivering
-absurd or grim facts in the same flat tone as mundane ones, letting
-the gap between tone and content do the comedic work. This is a
-satirical, not a slapstick, register — closer to a dry aside at a
-funeral than a pantomime. The historical facts underneath the wit
-must stay completely accurate: real outcomes, real consequences,
-real detail. No preamble, no title, just the paragraph, then the
-three extra lines described below.
+HEADLINE_RULE = """
+Start your reply with one line in this exact format:
+HEADLINE: <a short, punchy, real headline for this specific event —
+think proper newspaper or documentary title, evocative and specific
+to what actually happened, not generic and not mentioning pigeons>
+""".strip()
 
-{location_rule}
+STORY_PROMPT = """
+You write a paragraph (180-260 words) narrating a real historical
+event as a dry, witty exchange between Barry and Susan — two pigeons
+perched somewhere absurd and close to the action — who are playing
+the actual historical figures involved, or narrating what those
+figures are doing, whichever reads better. Write in a distinctly
+British sense of humour: dry, deadpan, understated, wry
+self-deprecation, irony over slapstick, the sort of thing that gets
+a raised eyebrow rather than a belly laugh. Model your voice on this
+example, which is the target quality bar: dialogue-driven, genuinely
+funny through specific and surprising real detail rather than
+slapstick or forced accents, dry asides, and enough actual substance
+that a reader comes away understanding exactly what happened and why
+it mattered — nothing vague, nothing hand-wavy.
+
+{headline_rule}
+
+EXAMPLE (match this style, not this event):
+"Barry eyed the man below with the mirrored sunglasses and
+ceremonial dagger. 'That's Colonel Gaddafi, Susan. 1977. Just
+invented a whole system of government called the Jamahiriya —
+Arabic, roughly, for "nobody's technically in charge, wink wink."
+No president, no parliament, no parties. Just "the people," directly
+ruling themselves. And who's stood at the podium in the safari suit
+explaining how the people rule themselves? Him. Constantly. Even
+written a little book about it — The Green Book — required reading,
+rather like a cult pamphlet with better production values. Calls
+himself "Brotherly Leader," no official title, purely coincidental
+he controls the army, the oil money, and everyone's postbox.'
+Susan ruffled her feathers. 'Builds a hospital with one hand,
+disappears a critic with the other. Funds revolutionaries abroad
+like it's a hobby. Frightfully generous with other people's
+countries.' Barry took off. 'Man commits to a costume change,
+though. Give him that.'"
+
+For anything involving real people within living memory, large-scale
+atrocities, or terrorism: keep the same dry, dialogue-driven clarity,
+but pull the humour right back and let the facts carry the weight
+instead — Barry and Susan stay commentating bystanders, never
+identified as or standing in for any real specific person involved.
+Only use a regional voice or accent where it genuinely fits and
+adds something — never force a phonetic accent as decoration, it
+should read as clean, sharp prose above all else. The historical
+facts must be completely accurate and specific: real names, real
+terms, real numbers, real outcomes. No preamble beyond the headline
+line, then the paragraph, then the two extra lines described below.
 
 {regret_winner_rule}
-""".format(location_rule=LOCATION_RULE, regret_winner_rule=REGRET_WINNER_RULE).strip()
+""".format(regret_winner_rule=REGRET_WINNER_RULE, headline_rule=HEADLINE_RULE).strip()
 
 
 def fetch_todays_event() -> dict:
     """Pull today's on-this-day events from Wikimedia, prefer a
-       war/conflict-related one, fall back to any event, then to a
-       generic placeholder if the feed is unreachable."""
+    war/conflict-related one, fall back to any event, then to a
+    generic placeholder if the feed is unreachable."""
     today = date.today()
     url = ONTHISDAY_URL.format(month=f"{today.month:02d}", day=f"{today.day:02d}")
     try:
@@ -143,63 +209,36 @@ def fetch_todays_event() -> dict:
 
 
 def build_image_prompt(event: dict) -> str:
-    year_bit = f" in {event['year']}" if event.get("year") else ""
-    return f"{CHARACTER_BASE} {IMAGE_SYSTEM_NOTE} Real event{year_bit}: {event['text']}."
+    year_bit = f" set in the year {event['year']}," if event.get("year") else ""
+    era_note = photo_era_note(event)
+    return (
+        f"{CHARACTER_BASE} {IMAGE_NOTE} {era_note} {COMIC_DEVICES_RULE} {BACKGROUND_RULE} "
+        f"Today's real historical event,{year_bit} to reference for "
+        f"costume and setting only: {event['text']}."
+    )
 
 
-def _query_hf_image_with_retry(prompt: str, max_attempts: int = 4) -> bytes:
-    """POST the prompt to the HF Inference API, retrying not just on bad
-       HTTP status but also when what comes back doesn't actually look
-       like a real photo — a 200 response with a JSON error body, or a
-       suspiciously tiny file, would otherwise get silently written to
-       disk as if it were fine. A 503 means the model is cold-starting,
-       which HF reports with an estimated_time to wait before retrying."""
-    if not HF_TOKEN:
-        raise RuntimeError("HF_TOKEN not set")
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    MIN_IMAGE_BYTES = 15_000
-    last_reason = None
+def _get_with_retry(url: str, max_attempts: int = 4) -> requests.Response:
+    """GET with retry/backoff for the (unauthenticated, occasionally
+    flaky) Pollinations image endpoint."""
+    last_error = None
     for attempt in range(1, max_attempts + 1):
-        resp = requests.post(
-            HF_IMAGE_API_URL, headers=headers, json={"inputs": prompt}, timeout=120
-        )
-        content_type = resp.headers.get("Content-Type", "")
-
-        if resp.status_code == 503:
-            try:
-                wait = float(resp.json().get("estimated_time", 20))
-            except Exception:
-                wait = 20
-            last_reason = "model is loading (503)"
-            print(f"Attempt {attempt}/{max_attempts}: {last_reason}, waiting {wait:.0f}s...")
-            time.sleep(wait)
-            continue
-        elif resp.status_code != 200:
-            last_reason = f"HTTP {resp.status_code}"
-            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
-            print(f"Response body: {resp.text[:500]}")
-        elif not content_type.startswith("image/"):
-            last_reason = f"non-image response (Content-Type: {content_type})"
-            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
-            print(f"Response body: {resp.text[:500]}")
-        elif len(resp.content) < MIN_IMAGE_BYTES:
-            last_reason = f"suspiciously small image ({len(resp.content)} bytes) — likely a placeholder/blocked-content response"
-            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
-        else:
-            print(f"Got a valid image: {content_type}, {len(resp.content)} bytes")
-            return resp.content
-
+        resp = requests.get(url, timeout=120)
+        if resp.status_code == 200:
+            return resp
+        print(f"Attempt {attempt}/{max_attempts} failed: HTTP {resp.status_code}")
+        print(f"Response body: {resp.text[:500]}")
+        last_error = resp
         wait = 5 * attempt
         print(f"Retrying in {wait}s...")
         time.sleep(wait)
-
-    raise RuntimeError(f"Gave up after {max_attempts} attempts. Last reason: {last_reason}")
+    raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
 
 
 def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
     """POST to Groq's OpenAI-compatible chat completions endpoint,
-       retrying on 429/5xx with backoff, surfacing the actual error body
-       on failure rather than a bare status code."""
+    retrying on 429/5xx with backoff, surfacing the actual error body
+    on failure rather than a bare status code."""
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
@@ -226,21 +265,27 @@ def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
 
 
 def generate_image(prompt: str) -> bytes:
+    # Pollinations' image endpoint takes the prompt in the URL path itself
+    # (no POST body), so an overly long prompt can 404 rather than fail
+    # with a clearer error. Cap it defensively.
     MAX_PROMPT_CHARS = 1500
     if len(prompt) > MAX_PROMPT_CHARS:
         print(f"Prompt is {len(prompt)} chars, trimming to {MAX_PROMPT_CHARS}")
         prompt = prompt[:MAX_PROMPT_CHARS]
-    return _query_hf_image_with_retry(prompt)
+    encoded = urllib.parse.quote(prompt)
+    url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true"
+    resp = _get_with_retry(url)
+    return resp.content
 
 
 def generate_story(event: dict) -> dict:
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY not set")
     year_bit = f" (year: {event['year']})" if event.get("year") else ""
-    prompt = f"{STORY_SYSTEM_PROMPT}\n\nReal event{year_bit}: {event['text']}"
+    prompt = f"{STORY_PROMPT}\n\nReal event{year_bit}: {event['text']}"
     payload = {
         "model": GROQ_MODEL,
-        "max_tokens": 500,
+        "max_tokens": 600,
         "messages": [{"role": "user", "content": prompt}],
     }
     data = _groq_post_with_retry(payload)
@@ -249,20 +294,19 @@ def generate_story(event: dict) -> dict:
 
 
 def parse_story_response(raw: str) -> dict:
-    """Split the model's reply into the main paragraph plus LOCATION,
-    REGRET, and WINNER lines. Falls back gracefully if the model didn't
-    follow the format exactly — the paragraph still gets published
-    either way."""
+    """Split the model's reply into headline, main paragraph, REGRET,
+    and WINNER lines. Falls back gracefully if the model didn't follow
+    the format exactly — the paragraph still gets published either way."""
+    headline = None
     paragraph_lines = []
-    location_name = None
     regret_percent = None
     regret_line = None
     winner_line = None
 
     for line in raw.splitlines():
         stripped = line.strip()
-        if stripped.upper().startswith("LOCATION:"):
-            location_name = stripped.split(":", 1)[1].strip()
+        if stripped.upper().startswith("HEADLINE:"):
+            headline = stripped.split(":", 1)[1].strip().strip('"')
         elif stripped.upper().startswith("REGRET:"):
             rest = stripped.split(":", 1)[1].strip()
             if "|" in rest:
@@ -277,37 +321,12 @@ def parse_story_response(raw: str) -> dict:
             paragraph_lines.append(stripped)
 
     return {
+        "headline": headline,
         "story": " ".join(paragraph_lines).strip(),
-        "location_name": location_name,
         "regret_percent": regret_percent,
         "regret_line": regret_line,
         "winner_line": winner_line,
     }
-
-
-def geocode_location(place_name: str) -> dict | None:
-    """Look up lat/lon for a place name via Nominatim (OpenStreetMap's
-    free geocoder — no key, no billing). Best-effort: returns None on
-    any failure rather than blocking the rest of the run, since the map
-    is a nice-to-have, not core to the post."""
-    if not place_name:
-        return None
-    try:
-        resp = requests.get(
-            "https://nominatim.openstreetmap.org/search",
-            params={"q": place_name, "format": "json", "limit": 1},
-            headers={"User-Agent": "barry-and-susan-history-app/1.0"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        results = resp.json()
-        if not results:
-            print(f"Geocoding found nothing for: {place_name}")
-            return None
-        return {"lat": float(results[0]["lat"]), "lon": float(results[0]["lon"])}
-    except Exception as e:
-        print(f"Geocoding failed for '{place_name}': {e}")
-        return None
 
 
 def main():
@@ -320,23 +339,19 @@ def main():
     story_data = None
     try:
         story_data = generate_story(event)
+        print(f"Headline: {story_data['headline']}")
         print(f"Story: {story_data['story']}")
-        print(f"Location: {story_data['location_name']}")
         print(f"Regret: {story_data['regret_percent']}% — {story_data['regret_line']}")
         print(f"Winner: {story_data['winner_line']}")
     except Exception as e:
         print(f"Story generation failed, publishing image without it: {e}")
         story_data = {
+            "headline": event.get("text", "History, unwritten today")[:80],
             "story": "Barry and Susan witnessed today's history, but the report went unwritten.",
-            "location_name": None,
             "regret_percent": None,
             "regret_line": None,
             "winner_line": None,
         }
-
-    coords = geocode_location(story_data["location_name"])
-    if coords:
-        print(f"Coordinates: {coords['lat']}, {coords['lon']}")
 
     os.makedirs("docs", exist_ok=True)
     with open("docs/today.png", "wb") as f:
@@ -348,10 +363,8 @@ def main():
                 "date": date.today().isoformat(),
                 "event_year": event.get("year"),
                 "event_text": event["text"],
+                "headline": story_data["headline"],
                 "story": story_data["story"],
-                "location_name": story_data["location_name"],
-                "lat": coords["lat"] if coords else None,
-                "lon": coords["lon"] if coords else None,
                 "regret_percent": story_data["regret_percent"],
                 "regret_line": story_data["regret_line"],
                 "winner_line": story_data["winner_line"],
