@@ -19,10 +19,12 @@ from datetime import date, datetime, timezone
 
 import requests
 
-# NOTE: image.pollinations.ai/prompt previously 404'd repeatedly earlier
-# in this build. gen.pollinations.ai/image is the endpoint that's been
-# validated working most recently — using that instead.
-IMAGE_BASE_URL = "https://gen.pollinations.ai/image"
+# gen.pollinations.ai requires an API key now (confirmed 401 on image
+# requests, not just text) — image.pollinations.ai/prompt is the actual
+# documented anonymous, no-key path. It 404'd earlier in this build with
+# a much longer/more complex prompt; now that the prompt is shorter and
+# length-capped below, worth trying again rather than assuming it's dead.
+IMAGE_BASE_URL = "https://image.pollinations.ai/prompt"
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
