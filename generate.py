@@ -71,14 +71,14 @@ small, incidental witnesses to it. The historical facts you state
 must be accurate to the real event given below: real dates, real
 outcomes, real consequences. Barry and Susan only observe and narrate from their ridiculous perspective. 
 The tone should be absurd and factual to relfect the events. No preamble, no title, just the
-paragraph itself.
+paragraph itself. 
 """.strip()
 
 IMAGE_SYSTEM_NOTE = """
 Depict Barry and Susan as onlookers present at the scene, dressed in
 clothing typical of the event's time and place. If possible, depict them
 as, or give them the likeness of, the specific real historical
-individual(s) — they remain the same two pigeon characters, but in costume if possible. 
+individual(s) — they remain the same two pigeon characters, but in costume if possible. For example, if they are narrative the iraq war, they should be in relevant tactical gear.
 """.strip()
 
 
