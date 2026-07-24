@@ -4,47 +4,47 @@
 <meta charset="UTF-8">
 <title>Barry &amp; Susan</title>
 <style>
-html, body {
-margin: 0;
-min-height: 100%;
-background: #F5EFE1;
-font-family: Georgia, 'Times New Roman', serif;
-color: #2a2a26;
-display: flex;
-align-items: center;
-justify-content: center;
-}
-.page {
-width: min(90vw, 700px);
-text-align: center;
-padding: 4vh 0;
-}
-h1 {
-font-weight: normal;
-font-size: 1.1rem;
-letter-spacing: 0.02em;
-margin: 0 0 0.3em;
-opacity: 0.85;
-}
-h2 {
-font-weight: normal;
-font-style: italic;
-font-size: 0.9rem;
-margin: 0 0 2vh;
-opacity: 0.6;
-}
-img {
-max-width: 100%;
-max-height: 55vh;
-display: block;
-margin: 0 auto 3vh;
--webkit-mask-image: radial-gradient(ellipse 85% 85% at center, black 55%, transparent 100%);
-mask-image: radial-gradient(ellipse 85% 85% at center, black 55%, transparent 100%);
-}
-p.story {
-font-size: 1.05rem;
-line-height: 1.6;
-text-align: left;
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: #F5EFE1;
+    font-family: Georgia, 'Times New Roman', serif;
+    color: #2a2a26;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .page {
+    width: min(90vw, 700px);
+    text-align: center;
+    padding: 4vh 0;
+  }
+  h1 {
+    font-weight: normal;
+    font-size: 1.6rem;
+    line-height: 1.25;
+    letter-spacing: 0.01em;
+    margin: 0 0 0.25em;
+  }
+  h2 {
+    font-weight: normal;
+    font-style: italic;
+    font-size: 0.9rem;
+    margin: 0 0 2vh;
+    opacity: 0.6;
+  }
+  img {
+    max-width: 100%;
+    max-height: 55vh;
+    display: block;
+    margin: 0 auto 3vh;
+    -webkit-mask-image: radial-gradient(ellipse 85% 85% at center, black 55%, transparent 100%);
+    mask-image: radial-gradient(ellipse 85% 85% at center, black 55%, transparent 100%);
+  }
+  p.story {
+    font-size: 1.05rem;
+    line-height: 1.6;
+    text-align: left;
     margin: 0 0 2.5vh;
   }
   .badges {
@@ -73,15 +73,38 @@ text-align: left;
   }
   .badge-percent {
     font-weight: bold;
-}
+  }
+  .map-wrap {
+    margin: 0 0 2.5vh;
+    display: none;
+  }
+  .map-wrap iframe {
+    width: 100%;
+    height: 260px;
+    border: 1px solid rgba(42, 42, 38, 0.25);
+    border-radius: 6px;
+  }
+  .map-caption {
+    font-size: 0.8rem;
+    opacity: 0.6;
+    margin-top: 4px;
+    text-align: left;
+  }
+  .map-caption a {
+    color: inherit;
+  }
 </style>
 </head>
 <body>
-<div class="page">
-<h1>Barry and Susan</h1>
-<h2 id="year"></h2>
-<img id="pic" src="today.png" alt="Barry and Susan">
-<p class="story" id="story">Loading today's nonsense…</p>
+  <div class="page">
+    <h1 id="headline">Loading today's history…</h1>
+    <h2 id="year"></h2>
+    <img id="pic" src="today.png" alt="Barry and Susan">
+    <p class="story" id="story">Loading today's nonsense…</p>
+    <div class="map-wrap" id="map-wrap">
+      <iframe id="map-frame" loading="lazy"></iframe>
+      <div class="map-caption" id="map-caption"></div>
+    </div>
     <div class="badges" id="badges" style="display: none;">
       <div class="badge" id="regret-badge" style="display: none;">
         <div class="badge-label">Regret-o-meter</div>
@@ -95,18 +118,19 @@ text-align: left;
         <div class="badge-value" id="winner-line"></div>
       </div>
     </div>
-</div>
-<script>
-const stamp = new Date().toISOString().slice(0, 10);
-document.getElementById('pic').src = 'today.png?v=' + stamp;
+  </div>
+  <script>
+    const stamp = new Date().toISOString().slice(0, 10);
+    document.getElementById('pic').src = 'today.png?v=' + stamp;
 
-fetch('today.json?v=' + stamp)
-.then(r => r.json())
-.then(data => {
-document.getElementById('story').textContent = data.story || '';
-if (data.event_year) {
-document.getElementById('year').textContent = 'On this day, ' + data.event_year;
-}
+    fetch('today.json?v=' + stamp)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('headline').textContent = data.headline || 'On this day…';
+        document.getElementById('story').textContent = data.story || '';
+        if (data.event_year) {
+          document.getElementById('year').textContent = 'On this day, ' + data.event_year;
+        }
 
         let anyBadge = false;
 
@@ -127,10 +151,22 @@ document.getElementById('year').textContent = 'On this day, ' + data.event_year;
         if (anyBadge) {
           document.getElementById('badges').style.display = 'flex';
         }
-})
-.catch(() => {
-document.getElementById('story').textContent = '';
-});
-</script>
+
+        if (data.lat && data.lon) {
+          const lat = data.lat, lon = data.lon;
+          const d = 0.15; // rough bounding box padding in degrees
+          const bbox = [lon - d, lat - d, lon + d, lat + d].join('%2C');
+          const src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&marker=${lat}%2C${lon}`;
+          document.getElementById('map-frame').src = src;
+          document.getElementById('map-caption').innerHTML =
+            (data.location_name || 'Location') +
+            ` — <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=6/${lat}/${lon}" target="_blank" rel="noopener">view larger map</a>`;
+          document.getElementById('map-wrap').style.display = 'block';
+        }
+      })
+      .catch(() => {
+        document.getElementById('story').textContent = '';
+      });
+  </script>
 </body>
 </html>
