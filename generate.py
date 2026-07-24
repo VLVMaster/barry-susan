@@ -24,7 +24,7 @@ from datetime import date, datetime, timezone
 
 import requests
 
-IMAGE_BASE_URL = "https://image.pollinations.ai/prompt"
+IMAGE_BASE_URL = "https://gen.pollinations.ai/image"
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
