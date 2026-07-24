@@ -217,21 +217,38 @@ def build_image_prompt(event: dict) -> str:
     )
 
 
-def _get_with_retry(url: str, max_attempts: int = 4) -> requests.Response:
-    """GET with retry/backoff for the (unauthenticated, occasionally
-    flaky) Pollinations image endpoint."""
-    last_error = None
+def _get_image_with_retry(url: str, max_attempts: int = 4) -> bytes:
+    """GET the image, retrying not just on bad HTTP status but also when
+    what comes back doesn't actually look like a real photo — a 200
+    response with an HTML/JSON error body, or a suspiciously tiny file
+    (a blocked-content placeholder), would otherwise get silently
+    written to disk as if it were a success."""
+    MIN_IMAGE_BYTES = 15_000  # a real 1024x768 photo is comfortably above this
+    last_reason = None
     for attempt in range(1, max_attempts + 1):
         resp = requests.get(url, timeout=120)
-        if resp.status_code == 200:
-            return resp
-        print(f"Attempt {attempt}/{max_attempts} failed: HTTP {resp.status_code}")
-        print(f"Response body: {resp.text[:500]}")
-        last_error = resp
+        content_type = resp.headers.get("Content-Type", "")
+
+        if resp.status_code != 200:
+            last_reason = f"HTTP {resp.status_code}"
+            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+            print(f"Response body: {resp.text[:500]}")
+        elif not content_type.startswith("image/"):
+            last_reason = f"non-image response (Content-Type: {content_type})"
+            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+            print(f"Response body: {resp.text[:500]}")
+        elif len(resp.content) < MIN_IMAGE_BYTES:
+            last_reason = f"suspiciously small image ({len(resp.content)} bytes) — likely a placeholder/blocked-content response"
+            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+        else:
+            print(f"Got a valid image: {content_type}, {len(resp.content)} bytes")
+            return resp.content
+
         wait = 5 * attempt
         print(f"Retrying in {wait}s...")
         time.sleep(wait)
-    raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
+
+    raise RuntimeError(f"Gave up after {max_attempts} attempts. Last reason: {last_reason}")
 
 
 def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
@@ -273,8 +290,7 @@ def generate_image(prompt: str) -> bytes:
         prompt = prompt[:MAX_PROMPT_CHARS]
     encoded = urllib.parse.quote(prompt)
     url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true"
-    resp = _get_with_retry(url)
-    return resp.content
+    return _get_image_with_retry(url)
 
 
 def generate_story(event: dict) -> dict:
