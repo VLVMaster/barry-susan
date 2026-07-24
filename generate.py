@@ -43,16 +43,17 @@ CONFLICT_KEYWORDS = [
 CHARACTER_BASE = """
 Two cartoon pigeons in a warm, flat, gently retro illustration style,
 bold outlines, limited earthy-plus-one-accent-colour palette, simple
-shading, a children's-book-illustration feel, no photorealism.
+shading, a children's-book-illustration feel, but like theyve suffered at the historical event in question. 
 Barry: a slightly round, scruffy grey pigeon, always looks a bit
-pleased with himself. Susan: a sleeker, iridescent green-and-purple-
+pleased with himself and wears red adidas tracksuit bottoms.
+Susan: a sleeker, ginger haired iridescent green-and-purple-
 necked pigeon with small round glasses, always looks like she's the
 one actually in charge. Always shown together, same two characters,
-same underlying style.
+same underlying style. 
 """.strip()
 
 BACKGROUND_RULE = """
-No scenery beyond what's specified below, no extra props. The area
+No scenery beyond what's specified below, no extra props unless relevant to the event. The area
 behind the characters is a single flat, completely uniform, unbroken
 solid colour, exactly {bg_hex}, filling the whole frame edge to edge,
 no gradient, no texture.
@@ -68,8 +69,7 @@ You write a single short paragraph (70-110 words) about a real
 historical event, narrated as if Barry and Susan — two pigeons — were
 small, incidental witnesses to it. The historical facts you state
 must be accurate to the real event given below: real dates, real
-outcomes, real consequences. Barry and Susan only observe and react
-in a couple of light asides 
+outcomes, real consequences. Barry and Susan only observe and narrate from their ridiculous perspective. 
 The tone should be absurd and factual to relfect the events. No preamble, no title, just the
 paragraph itself.
 """.strip()
