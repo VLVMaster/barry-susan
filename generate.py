@@ -51,13 +51,27 @@ same tags, every time.
 
 IMAGE_SYSTEM_NOTE = """
 Barry and Susan are physically present in the scene, right in among
-the real historical event, as if actually photographed there.
+the real historical event, as if actually photographed there — not
+off to the side, not a small background detail, genuinely part of
+the shot. They may wear small real props/costume pieces evoking the
+event or figures involved (a tiny hat, a scrap of period fabric) —
+playful, not a full costume. The rest of the scene (people, setting,
+architecture) is real and photographically plausible for the time
+and place. No graphic violence, implied only. Keep any real recent
+individual's likeness generic rather than exact.
 """.strip()
 
 FALLBACK_EVENT = {
     "year": None,
     "text": "just an ordinary day, nothing of note recorded",
 }
+
+LOCATION_RULE = """
+Also add one more line, before REGRET/WINNER, in this exact format:
+LOCATION: <the specific real place this event happened, as a
+geocodable name — e.g. "Ypres, Belgium" or "Nocera, Italy" — as
+precise as is actually known, city/town level where possible>
+""".strip()
 
 REGRET_WINNER_RULE = """
 After the paragraph, add exactly two more lines in this exact format:
@@ -80,7 +94,7 @@ systems and institutions, not at accusing a real person of a crime.
 """.strip()
 
 STORY_SYSTEM_PROMPT = """
-You write a single paragraph (200-250 words) narrating a real
+You write a single paragraph (100-150 words) narrating a real
 historical event, in the voice of Barry and Susan — two pigeons who
 are right there in the middle of it, reacting to what's unfolding
 around them. Write in a distinctly British, Blackadder-style deadpan
@@ -90,11 +104,13 @@ the gap between tone and content do the comedic work. This is a
 satirical, not a slapstick, register — closer to a dry aside at a
 funeral than a pantomime. The historical facts underneath the wit
 must stay completely accurate: real outcomes, real consequences,
-real detail. No preamble, no title, just the paragraph, then the two
-extra lines described below.
+real detail. No preamble, no title, just the paragraph, then the
+three extra lines described below.
+
+{location_rule}
 
 {regret_winner_rule}
-""".format(regret_winner_rule=REGRET_WINNER_RULE).strip()
+""".format(location_rule=LOCATION_RULE, regret_winner_rule=REGRET_WINNER_RULE).strip()
 
 
 def fetch_todays_event() -> dict:
@@ -215,17 +231,21 @@ def generate_story(event: dict) -> dict:
 
 
 def parse_story_response(raw: str) -> dict:
-    """Split the model's reply into the main paragraph plus REGRET and
-    WINNER lines. Falls back gracefully if the model didn't follow the
-    format exactly — the paragraph still gets published either way."""
+    """Split the model's reply into the main paragraph plus LOCATION,
+    REGRET, and WINNER lines. Falls back gracefully if the model didn't
+    follow the format exactly — the paragraph still gets published
+    either way."""
     paragraph_lines = []
+    location_name = None
     regret_percent = None
     regret_line = None
     winner_line = None
 
     for line in raw.splitlines():
         stripped = line.strip()
-        if stripped.upper().startswith("REGRET:"):
+        if stripped.upper().startswith("LOCATION:"):
+            location_name = stripped.split(":", 1)[1].strip()
+        elif stripped.upper().startswith("REGRET:"):
             rest = stripped.split(":", 1)[1].strip()
             if "|" in rest:
                 pct, txt = rest.split("|", 1)
@@ -240,10 +260,36 @@ def parse_story_response(raw: str) -> dict:
 
     return {
         "story": " ".join(paragraph_lines).strip(),
+        "location_name": location_name,
         "regret_percent": regret_percent,
         "regret_line": regret_line,
         "winner_line": winner_line,
     }
+
+
+def geocode_location(place_name: str) -> dict | None:
+    """Look up lat/lon for a place name via Nominatim (OpenStreetMap's
+    free geocoder — no key, no billing). Best-effort: returns None on
+    any failure rather than blocking the rest of the run, since the map
+    is a nice-to-have, not core to the post."""
+    if not place_name:
+        return None
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": place_name, "format": "json", "limit": 1},
+            headers={"User-Agent": "barry-and-susan-history-app/1.0"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        results = resp.json()
+        if not results:
+            print(f"Geocoding found nothing for: {place_name}")
+            return None
+        return {"lat": float(results[0]["lat"]), "lon": float(results[0]["lon"])}
+    except Exception as e:
+        print(f"Geocoding failed for '{place_name}': {e}")
+        return None
 
 
 def main():
@@ -257,16 +303,22 @@ def main():
     try:
         story_data = generate_story(event)
         print(f"Story: {story_data['story']}")
+        print(f"Location: {story_data['location_name']}")
         print(f"Regret: {story_data['regret_percent']}% — {story_data['regret_line']}")
         print(f"Winner: {story_data['winner_line']}")
     except Exception as e:
         print(f"Story generation failed, publishing image without it: {e}")
         story_data = {
             "story": "Barry and Susan witnessed today's history, but the report went unwritten.",
+            "location_name": None,
             "regret_percent": None,
             "regret_line": None,
             "winner_line": None,
         }
+
+    coords = geocode_location(story_data["location_name"])
+    if coords:
+        print(f"Coordinates: {coords['lat']}, {coords['lon']}")
 
     os.makedirs("docs", exist_ok=True)
     with open("docs/today.png", "wb") as f:
@@ -279,6 +331,9 @@ def main():
                 "event_year": event.get("year"),
                 "event_text": event["text"],
                 "story": story_data["story"],
+                "location_name": story_data["location_name"],
+                "lat": coords["lat"] if coords else None,
+                "lon": coords["lon"] if coords else None,
                 "regret_percent": story_data["regret_percent"],
                 "regret_line": story_data["regret_line"],
                 "winner_line": story_data["winner_line"],
