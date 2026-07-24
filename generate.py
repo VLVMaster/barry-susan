@@ -140,7 +140,7 @@ the actual historical figures involved, or narrating what those
 figures are doing, whichever reads better. Write in a distinctly
 British sense of humour: dry, deadpan, understated, wry
 self-deprecation, irony over slapstick, the sort of thing that gets
-a raised eyebrow rather than a belly laugh. Model your voice on this
+a raised eyebrow rather than a belly laugh, like blackadder. Model your voice on this
 example, which is the target quality bar: dialogue-driven, genuinely
 funny through specific and surprising real detail rather than
 slapstick or forced accents, dry asides, and enough actual substance
