@@ -38,7 +38,7 @@ PAGE_BACKGROUND_HEX = "#F5EFE1"
 # Bias event selection toward war/conflict when possible, per preference —
 # falls back to any event on days where nothing matches.
 CONFLICT_KEYWORDS = [
-    "war", "battle", "invasion", "massacre", "revolution", "assassinat",
+    "invasion", "massacre", "revolution", "assassinat",
     "coup", "siege", "bombing", "genocide", "uprising", "rebellion",
     "military", "army", "troops", "conquest", "occupation", "riot",
 ]
@@ -46,15 +46,18 @@ CONFLICT_KEYWORDS = [
 # Fixed character description — repeated every single call.
 # Consistency comes from restating this every time, not from the model remembering.
 CHARACTER_BASE = """
-Two cartoon pigeons in a warm, flat, gently retro illustration style,
-bold outlines, limited earthy-plus-one-accent-colour palette, simple
-shading, a children's-book-illustration feel, no photorealism.
+Detailed hand-drawn illustration style — fine pencil and ink linework,
+soft cross-hatching and shading, muted sepia-and-watercolour palette
+on aged parchment, like a vintage engraved storybook illustration or
+an old natural-history print, NOT flat cartoon colour, NOT comic
+linework. Expressive, characterful faces despite the fine detail.
 Barry: a slightly round, scruffy grey pigeon, always looks a bit
-pleased with himself and he wears red adidas tracksuit bottoms. Susan: a sleeker, iridescent green-and-purple-
-necked pigeon with small round glasses, always looks like she's the
-one actually in charge with ginger hair. Always shown together, same two characters,
-same underlying style and they love each other.
+pleased with himself, wears red adidas tracksuit bottoms. Susan: a sleeker, iridescent green-and-purple-
+necked pigeon with ginger hair, always looks like she's the
+one actually in charge. Same two characters, same underlying style,
+every time.
 """.strip()
+
 
 BACKGROUND_RULE = """
 No scenery beyond what's specified below, no extra props. The area
@@ -89,7 +92,7 @@ whatever makes it fun to read aloud) — the goal is genuinely
 entertaining, shareable, laugh-out-loud. The historical
 facts underneath the silliness must stay completely accurate: real
 outcomes, real consequences, real detail. No preamble, no title,
-just the paragraph.
+just the paragraph. Make it dark. 
 """.strip()
 
 
