@@ -17,7 +17,7 @@ from datetime import date, datetime, timezone
 import requests
 
 IMAGE_BASE_URL = "https://image.pollinations.ai/prompt"
-TEXT_BASE_URL = "https://text.pollinations.ai"
+TEXT_BASE_URL = "https://gen.pollinations.ai/text"
 
 # Page background colour — the image is generated on this exact colour so it
 # sits on the page with no visible edge/box around the characters.
@@ -117,8 +117,13 @@ def main():
     # the image call and the text call.
     time.sleep(15)
 
-    story = generate_story(theme)
-    print(f"Story: {story}")
+    story = None
+    try:
+        story = generate_story(theme)
+        print(f"Story: {story}")
+    except Exception as e:
+        print(f"Story generation failed, publishing image without it: {e}")
+        story = "Barry and Susan were far too busy today for anyone to write down what happened."
 
     os.makedirs("docs", exist_ok=True)
     with open("docs/today.png", "wb") as f:
