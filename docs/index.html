@@ -45,6 +45,34 @@
     font-size: 1.05rem;
     line-height: 1.6;
     text-align: left;
+    margin: 0 0 2.5vh;
+  }
+  .badges {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .badge {
+    border: 1px solid rgba(42, 42, 38, 0.25);
+    border-radius: 6px;
+    padding: 8px 14px;
+    text-align: left;
+    flex: 1 1 220px;
+  }
+  .badge-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.55;
+    margin-bottom: 2px;
+  }
+  .badge-value {
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+  .badge-percent {
+    font-weight: bold;
   }
 </style>
 </head>
@@ -54,6 +82,19 @@
     <h2 id="year"></h2>
     <img id="pic" src="today.png" alt="Barry and Susan">
     <p class="story" id="story">Loading today's nonsense…</p>
+    <div class="badges" id="badges" style="display: none;">
+      <div class="badge" id="regret-badge" style="display: none;">
+        <div class="badge-label">Regret-o-meter</div>
+        <div class="badge-value">
+          <span class="badge-percent" id="regret-percent"></span>
+          <span id="regret-line"></span>
+        </div>
+      </div>
+      <div class="badge" id="winner-badge" style="display: none;">
+        <div class="badge-label">Who really won</div>
+        <div class="badge-value" id="winner-line"></div>
+      </div>
+    </div>
   </div>
   <script>
     const stamp = new Date().toISOString().slice(0, 10);
@@ -65,6 +106,26 @@
         document.getElementById('story').textContent = data.story || '';
         if (data.event_year) {
           document.getElementById('year').textContent = 'On this day, ' + data.event_year;
+        }
+
+        let anyBadge = false;
+
+        if (data.regret_line) {
+          document.getElementById('regret-badge').style.display = 'block';
+          document.getElementById('regret-percent').textContent =
+            data.regret_percent ? data.regret_percent + '% — ' : '';
+          document.getElementById('regret-line').textContent = data.regret_line;
+          anyBadge = true;
+        }
+
+        if (data.winner_line) {
+          document.getElementById('winner-badge').style.display = 'block';
+          document.getElementById('winner-line').textContent = data.winner_line;
+          anyBadge = true;
+        }
+
+        if (anyBadge) {
+          document.getElementById('badges').style.display = 'flex';
         }
       })
       .catch(() => {
