@@ -11,7 +11,7 @@ event and its details are real and accurate; the pigeons are not.
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
 
 - Image: Pollinations.ai (free, no key)
-- Story: Claude (Anthropic API, needs ANTHROPIC_API_KEY + billing)
+- Story: Groq (free tier, no credit card, needs GROQ_API_KEY)
 - History: Wikimedia on-this-day feed (free, no key)
 """
 import json
@@ -27,9 +27,9 @@ import requests
 IMAGE_BASE_URL = "https://image.pollinations.ai/prompt"
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-ANTHROPIC_MODEL = "claude-sonnet-5"
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Page background colour — the image is generated on this exact colour so it
 # sits on the page with no visible edge/box around the characters.
@@ -48,17 +48,16 @@ CONFLICT_KEYWORDS = [
 CHARACTER_BASE = """
 Two cartoon pigeons in a warm, flat, gently retro illustration style,
 bold outlines, limited earthy-plus-one-accent-colour palette, simple
-shading, a children's-book-illustration feel, but like theyve suffered at the historical event in question. 
+shading, a children's-book-illustration feel, no photorealism.
 Barry: a slightly round, scruffy grey pigeon, always looks a bit
-pleased with himself and wears red adidas tracksuit bottoms.
-Susan: a sleeker, ginger haired iridescent green-and-purple-
+pleased with himself. Susan: a sleeker, iridescent green-and-purple-
 necked pigeon with small round glasses, always looks like she's the
 one actually in charge. Always shown together, same two characters,
-same underlying style. 
+same underlying style.
 """.strip()
 
 BACKGROUND_RULE = """
-No scenery beyond what's specified below, no extra props unless relevant to the event. The area
+No scenery beyond what's specified below, no extra props. The area
 behind the characters is a single flat, completely uniform, unbroken
 solid colour, exactly {bg_hex}, filling the whole frame edge to edge,
 no gradient, no texture.
@@ -66,9 +65,12 @@ no gradient, no texture.
 
 IMAGE_SYSTEM_NOTE = """
 Depict Barry and Susan as onlookers present at the scene, dressed in
-clothing typical of the event's time and place. If possible, depict them
-as, or give them the likeness of, the specific real historical
-individual(s) — they remain the same two pigeon characters, but in costume if possible. For example, if they are narrative the iraq war, they should be in relevant tactical gear.
+clothing typical of the event's time and place. Do not depict them
+as, or give them the likeness of, any specific real historical
+individual — they remain the same two pigeon characters, just
+dressed for the era. No readable text, flags, or symbols associated
+with real hate movements or atrocities should be rendered in detail;
+keep any such elements implied and minimal rather than depicted.
 """.strip()
 
 FALLBACK_EVENT = {
@@ -81,10 +83,15 @@ You write a single short paragraph (70-110 words) about a real
 historical event, narrated as if Barry and Susan — two pigeons — were
 small, incidental witnesses to it. The historical facts you state
 must be accurate to the real event given below: real dates, real
-outcomes, real consequences. Barry and Susan only observe and narrate from their ridiculous perspective. 
-The tone should be absurd and factual to relfect the events. No preamble, no title, just the
-paragraph itself. 
+outcomes, real consequences. Barry and Susan only observe and react
+in a couple of light asides; they are not participants and are never
+identified as, or compared to, any specific real person involved.
+Match your tone to the actual weight of the event — plainly factual
+and restrained for anything grave, wry and playful only where the
+event itself is genuinely light. No preamble, no title, just the
+paragraph itself.
 """.strip()
+
 
 def fetch_todays_event() -> dict:
     """Pull today's on-this-day events from Wikimedia, prefer a
@@ -137,18 +144,17 @@ def _get_with_retry(url: str, max_attempts: int = 4) -> requests.Response:
     raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
 
 
-def _anthropic_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
-    """POST to the Anthropic API, retrying on 429/5xx with backoff,
-    surfacing the actual error body on failure rather than a bare
-    status code."""
+def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
+    """POST to Groq's OpenAI-compatible chat completions endpoint,
+    retrying on 429/5xx with backoff, surfacing the actual error body
+    on failure rather than a bare status code."""
     headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
     }
     last_error = None
     for attempt in range(1, max_attempts + 1):
-        resp = requests.post(ANTHROPIC_API_URL, headers=headers, json=payload, timeout=120)
+        resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=120)
         if resp.status_code == 200:
             return resp.json()
 
@@ -175,17 +181,17 @@ def generate_image(prompt: str) -> bytes:
 
 
 def generate_story(event: dict) -> str:
-    if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY not set")
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY not set")
     year_bit = f" (year: {event['year']})" if event.get("year") else ""
     prompt = f"{STORY_SYSTEM_PROMPT}\n\nReal event{year_bit}: {event['text']}"
     payload = {
-        "model": ANTHROPIC_MODEL,
+        "model": GROQ_MODEL,
         "max_tokens": 300,
         "messages": [{"role": "user", "content": prompt}],
     }
-    data = _anthropic_post_with_retry(payload)
-    return data["content"][0]["text"].strip()
+    data = _groq_post_with_retry(payload)
+    return data["choices"][0]["message"]["content"].strip()
 
 
 def main():
@@ -225,9 +231,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-    
-
-
-
-
-
