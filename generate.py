@@ -24,7 +24,7 @@ from datetime import date, datetime, timezone
 
 import requests
 
-IMAGE_BASE_URL = "https://image.pollinations.ai/prompt"
+IMAGE_BASE_URL = "https://pollinations.ai/p"
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -95,26 +95,15 @@ FALLBACK_EVENT = {
     "text": "just an ordinary day, nothing of note recorded",
 }
 
-# Events older than this get the full comedic treatment (pigeons dressed
-# and played AS the actual historical figures, à la Horrible Histories).
-# Anything more recent stays generic/witness-only — that's roughly where
-# "safely satirical history" shades into "real people within living
-# memory," so it's a reasonable, defensible line rather than an arbitrary one.
-PERIOD_THRESHOLD_YEARS = 100
-
-IMAGE_NOTE_PERIOD = """
+IMAGE_NOTE = """
 Barry and Susan wear small real props/costume pieces evoking the
-historical figures in this event (tiny hat, scrap of period fabric)
-— playful, not a full costume. Other real pigeons may appear
-similarly dressed as extras. No graphic violence, implied only.
-""".strip()
-
-IMAGE_NOTE_MODERN = """
-Barry and Susan are small pigeons in the corner of a real scene for
-this event, at most one subtle accessory. Real people relevant to
-the event appear naturally in the background, generic/anonymous, not
-a specific real person's likeness. No glorifying real atrocities,
-hate symbols, or terrorism; keep it generic and focus on the pigeons.
+historical figures or setting of this event (tiny hat, scrap of
+period fabric, small prop) — playful, not a full costume. Other real
+pigeons may appear similarly dressed as extras. No graphic violence,
+implied only. For anything involving real people within living
+memory, large-scale atrocities, hate symbols, or terrorism: keep
+props/likenesses generic rather than a specific real individual, and
+keep the framing on the pigeons rather than on the violence itself.
 """.strip()
 
 REGRET_WINNER_RULE = """
@@ -147,17 +136,20 @@ think proper newspaper or documentary title, evocative and specific
 to what actually happened, not generic and not mentioning pigeons>
 """.strip()
 
-STORY_PROMPT_PERIOD = """
+STORY_PROMPT = """
 You write a paragraph (180-260 words) narrating a real historical
 event as a dry, witty exchange between Barry and Susan — two pigeons
 perched somewhere absurd and close to the action — who are playing
 the actual historical figures involved, or narrating what those
-figures are doing, whichever reads better. Model your voice on this
+figures are doing, whichever reads better. Write in a distinctly
+British sense of humour: dry, deadpan, understated, wry
+self-deprecation, irony over slapstick, the sort of thing that gets
+a raised eyebrow rather than a belly laugh. Model your voice on this
 example, which is the target quality bar: dialogue-driven, genuinely
 funny through specific and surprising real detail rather than
-slapstick or forced accents, dry asides, and enough actual
-substance that a reader comes away understanding exactly what
-happened and why it mattered — nothing vague, nothing hand-wavy.
+slapstick or forced accents, dry asides, and enough actual substance
+that a reader comes away understanding exactly what happened and why
+it mattered — nothing vague, nothing hand-wavy.
 
 {headline_rule}
 
@@ -179,46 +171,17 @@ like it's a hobby. Frightfully generous with other people's
 countries.' Barry took off. 'Man commits to a costume change,
 though. Give him that.'"
 
+For anything involving real people within living memory, large-scale
+atrocities, or terrorism: keep the same dry, dialogue-driven clarity,
+but pull the humour right back and let the facts carry the weight
+instead — Barry and Susan stay commentating bystanders, never
+identified as or standing in for any real specific person involved.
 Only use a regional voice or accent where it genuinely fits and
 adds something — never force a phonetic accent as decoration, it
 should read as clean, sharp prose above all else. The historical
 facts must be completely accurate and specific: real names, real
 terms, real numbers, real outcomes. No preamble beyond the headline
 line, then the paragraph, then the two extra lines described below.
-
-{regret_winner_rule}
-""".format(regret_winner_rule=REGRET_WINNER_RULE, headline_rule=HEADLINE_RULE).strip()
-
-STORY_PROMPT_MODERN = """
-You write a paragraph (180-260 words) narrating a real historical
-event as if Barry and Susan — two pigeons — are literal flies on the
-wall, perched somewhere close to the action, reacting to it in real
-time. Model your voice on this example, which is the target quality
-bar: dialogue-driven, genuinely witty through specific and surprising
-real detail, dry rather than slapstick, and substantive enough that a
-reader comes away understanding exactly what happened and why —
-nothing vague, nothing hand-wavy:
-
-{headline_rule}
-
-EXAMPLE (match this style, not this event or tone — that example is
-for a lighter period event; for a grave modern event, keep the same
-dialogue-driven clarity but pull the humour right back and let the
-facts carry the weight instead):
-"Barry eyed the man below with the mirrored sunglasses and
-ceremonial dagger. 'That's Colonel Gaddafi, Susan. 1977. Just
-invented a whole system of government called the Jamahiriya —
-Arabic, roughly, for "nobody's technically in charge, wink wink." No
-president, no parliament, no parties.' Susan ruffled her feathers.
-'Builds a hospital with one hand, disappears a critic with the
-other.' Barry took off. 'Man commits to a costume change, though.'"
-
-Barry and Susan are only ever commentating bystanders — never
-participants, never identified as or standing in for any real
-specific person. The historical facts must be completely accurate
-and specific: real names, real terms, real numbers, real outcomes.
-No preamble beyond the headline line, then the paragraph, then the
-two extra lines described below.
 
 {regret_winner_rule}
 """.format(regret_winner_rule=REGRET_WINNER_RULE, headline_rule=HEADLINE_RULE).strip()
@@ -249,21 +212,11 @@ def fetch_todays_event() -> dict:
     return random.choice(pool)
 
 
-def is_period_event(event: dict) -> bool:
-    """True if the event is old enough for full costumed-embodiment
-    comedy; False (the safer default) for anything recent or unknown."""
-    year = event.get("year")
-    if year is None:
-        return False
-    return (date.today().year - year) > PERIOD_THRESHOLD_YEARS
-
-
 def build_image_prompt(event: dict) -> str:
     year_bit = f" set in the year {event['year']}," if event.get("year") else ""
-    note = IMAGE_NOTE_PERIOD if is_period_event(event) else IMAGE_NOTE_MODERN
     era_note = photo_era_note(event)
     return (
-        f"{CHARACTER_BASE} {note} {era_note} {COMIC_DEVICES_RULE} {BACKGROUND_RULE} "
+        f"{CHARACTER_BASE} {IMAGE_NOTE} {era_note} {COMIC_DEVICES_RULE} {BACKGROUND_RULE} "
         f"Today's real historical event,{year_bit} to reference for "
         f"costume and setting only: {event['text']}."
     )
@@ -333,8 +286,7 @@ def generate_story(event: dict) -> dict:
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY not set")
     year_bit = f" (year: {event['year']})" if event.get("year") else ""
-    system_prompt = STORY_PROMPT_PERIOD if is_period_event(event) else STORY_PROMPT_MODERN
-    prompt = f"{system_prompt}\n\nReal event{year_bit}: {event['text']}"
+    prompt = f"{STORY_PROMPT}\n\nReal event{year_bit}: {event['text']}"
     payload = {
         "model": GROQ_MODEL,
         "max_tokens": 600,
