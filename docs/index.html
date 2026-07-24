@@ -6,32 +6,57 @@
 <style>
   html, body {
     margin: 0;
-    height: 100%;
-    background: #f5efe1;
+    min-height: 100%;
+    background: #F5EFE1;
+    font-family: Georgia, 'Times New Roman', serif;
+    color: #2a2a26;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+  }
+  .page {
+    width: min(90vw, 700px);
+    text-align: center;
+    padding: 4vh 0;
+  }
+  h1 {
+    font-weight: normal;
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+    margin: 0 0 2vh;
+    opacity: 0.85;
   }
   img {
-    max-width: 100vw;
-    max-height: 100vh;
-    object-fit: contain;
+    max-width: 100%;
+    max-height: 55vh;
+    display: block;
+    margin: 0 auto 3vh;
+  }
+  p.story {
+    font-size: 1.05rem;
+    line-height: 1.6;
+    text-align: left;
   }
 </style>
 </head>
 <body>
-  <img id="pic" src="today.png" alt="Barry and Susan">
+  <div class="page">
+    <h1>Barry and Susan</h1>
+    <img id="pic" src="today.png" alt="Barry and Susan">
+    <p class="story" id="story">Loading today's nonsense…</p>
+  </div>
   <script>
-    // Cache-bust once a day so the Pi actually picks up the new image
-    // instead of showing a browser-cached version from yesterday.
-    const img = document.getElementById('pic');
-    function refresh() {
-      img.src = 'today.png?v=' + new Date().toISOString().slice(0, 10);
-    }
-    refresh();
-    // Re-check every hour in case the kiosk browser is left running for days.
-    setInterval(refresh, 60 * 60 * 1000);
+    const stamp = new Date().toISOString().slice(0, 10);
+    document.getElementById('pic').src = 'today.png?v=' + stamp;
+
+    fetch('today.json?v=' + stamp)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('story').textContent = data.story || '';
+      })
+      .catch(() => {
+        document.getElementById('story').textContent = '';
+      });
   </script>
 </body>
 </html>
