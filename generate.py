@@ -92,11 +92,8 @@ Go full costume-drama: Barry, Susan, and a supporting cast of other
 pigeons are dressed and posed AS the actual historical figures central
 to this event — a pigeon-monarch, pigeon-soldiers, pigeon-courtiers,
 whoever the event calls for — playing it out like an am-dram school
-history pageant. Exaggerated, silly, larger-than-life expressions and
-poses, in the same lively children's-storybook illustration style.
-Costume and setting should be recognisably of the era. Keep any
-violence completely non-graphic and slapstick/implied rather than
-depicted directly (a raised axe off-frame, not a beheading).
+history pageant.  Keep any violence completely graphic, and
+depicted directly. 
 """.strip()
 
 IMAGE_NOTE_MODERN = """
