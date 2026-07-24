@@ -9,8 +9,10 @@ or made to resemble, any specific real historical individual — the
 event and its details are real and accurate; the pigeons are not.
 
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
-Uses Pollinations.ai for generation (free, no key) and Wikimedia's
-on-this-day feed for history (free, no key).
+
+- Image: Pollinations.ai (free, no key)
+- Story: Gemini text model (free tier, needs GEMINI_API_KEY)
+- History: Wikimedia on-this-day feed (free, no key)
 """
 import json
 import os
@@ -23,8 +25,11 @@ from datetime import date, datetime, timezone
 import requests
 
 IMAGE_BASE_URL = "https://image.pollinations.ai/prompt"
-TEXT_BASE_URL = "https://gen.pollinations.ai/text"
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_TEXT_MODEL = "gemini-2.5-flash"
+GEMINI_TEXT_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent"
 
 # Page background colour — the image is generated on this exact colour so it
 # sits on the page with no visible edge/box around the characters.
@@ -59,6 +64,13 @@ solid colour, exactly {bg_hex}, filling the whole frame edge to edge,
 no gradient, no texture.
 """.format(bg_hex=PAGE_BACKGROUND_HEX).strip()
 
+IMAGE_SYSTEM_NOTE = """
+Depict Barry and Susan as onlookers present at the scene, dressed in
+clothing typical of the event's time and place. If possible, depict them
+as, or give them the likeness of, the specific real historical
+individual(s) — they remain the same two pigeon characters, but in costume if possible. For example, if they are narrative the iraq war, they should be in relevant tactical gear.
+""".strip()
+
 FALLBACK_EVENT = {
     "year": None,
     "text": "just an ordinary day, nothing of note recorded",
@@ -72,13 +84,6 @@ must be accurate to the real event given below: real dates, real
 outcomes, real consequences. Barry and Susan only observe and narrate from their ridiculous perspective. 
 The tone should be absurd and factual to relfect the events. No preamble, no title, just the
 paragraph itself. 
-""".strip()
-
-IMAGE_SYSTEM_NOTE = """
-Depict Barry and Susan as onlookers present at the scene, dressed in
-clothing typical of the event's time and place. If possible, depict them
-as, or give them the likeness of, the specific real historical
-individual(s) — they remain the same two pigeon characters, but in costume if possible. For example, if they are narrative the iraq war, they should be in relevant tactical gear.
 """.strip()
 
 
@@ -117,20 +122,42 @@ def build_image_prompt(event: dict) -> str:
 
 
 def _get_with_retry(url: str, max_attempts: int = 4) -> requests.Response:
-    """GET with retry/backoff. Pollinations is unauthenticated and can be
-    flaky under load, so a transient failure shouldn't kill the whole run."""
+    """GET with retry/backoff for the (unauthenticated, occasionally
+    flaky) Pollinations image endpoint."""
     last_error = None
     for attempt in range(1, max_attempts + 1):
         resp = requests.get(url, timeout=120)
         if resp.status_code == 200:
             return resp
-
         print(f"Attempt {attempt}/{max_attempts} failed: HTTP {resp.status_code}")
         print(f"Response body: {resp.text[:500]}")
         last_error = resp
-        wait = 5 * attempt  # 5s, 10s, 15s, 20s — gentle, since anonymous rate limit is ~1 req/15s
+        wait = 5 * attempt
         print(f"Retrying in {wait}s...")
         time.sleep(wait)
+    raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
+
+
+def _gemini_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
+    """POST to Gemini, retrying on 429/5xx with backoff, surfacing the
+    actual error body on failure rather than a bare status code."""
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        resp = requests.post(GEMINI_TEXT_URL, params={"key": GEMINI_API_KEY}, json=payload, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+
+        print(f"Attempt {attempt}/{max_attempts} failed: HTTP {resp.status_code}")
+        print(f"Response body: {resp.text[:500]}")
+
+        if resp.status_code == 429 or resp.status_code >= 500:
+            last_error = resp
+            wait = 2 ** attempt
+            print(f"Retrying in {wait}s...")
+            time.sleep(wait)
+            continue
+
+        resp.raise_for_status()  # non-retryable — fail immediately
 
     raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
 
@@ -143,12 +170,12 @@ def generate_image(prompt: str) -> bytes:
 
 
 def generate_story(event: dict) -> str:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY not set")
     year_bit = f" (year: {event['year']})" if event.get("year") else ""
     prompt = f"{STORY_SYSTEM_PROMPT}\n\nReal event{year_bit}: {event['text']}"
-    encoded = urllib.parse.quote(prompt)
-    url = f"{TEXT_BASE_URL}/{encoded}"
-    resp = _get_with_retry(url)
-    return resp.text.strip()
+    data = _gemini_post_with_retry({"contents": [{"parts": [{"text": prompt}]}]})
+    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
 def main():
@@ -157,10 +184,6 @@ def main():
 
     image_prompt = build_image_prompt(event)
     image_bytes = generate_image(image_prompt)
-
-    # Small pause to respect Pollinations' anonymous rate limit between
-    # the image call and the text call.
-    time.sleep(15)
 
     story = None
     try:
@@ -192,3 +215,6 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+    
+
+
