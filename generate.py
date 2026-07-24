@@ -22,9 +22,11 @@ import requests
 # successor (gen.pollinations.ai/image with a pk_ App Key) turned out to
 # require a funded balance, not actually free. Hugging Face's Inference
 # API is genuinely free (no payment required) at the cost of needing an
-# HF_TOKEN and occasional cold-start waits.
+# HF_TOKEN and occasional cold-start waits. HF retired the old
+# api-inference.huggingface.co host in favor of a router that dispatches
+# to a chosen inference provider.
 HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
-HF_IMAGE_API_URL = f"https://api-inference.huggingface.co/models/{HF_IMAGE_MODEL}"
+HF_IMAGE_API_URL = f"https://router.huggingface.co/hf-inference/models/{HF_IMAGE_MODEL}"
 HF_TOKEN = os.environ.get("HF_TOKEN")
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
