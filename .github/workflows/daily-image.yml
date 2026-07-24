@@ -23,6 +23,8 @@ jobs:
         run: pip install requests
 
       - name: Generate today's image
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python generate.py
 
       - name: Commit and push
