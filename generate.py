@@ -34,9 +34,9 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Bias event selection toward war/conflict when possible, per preference —
 # falls back to any event on days where nothing matches.
 CONFLICT_KEYWORDS = [
-"invasion", "massacre", "revolution", "assassinat",
-"coup", "siege", "bombing", "genocide", "uprising", "rebellion",
-"military", "army", "troops", "conquest", "occupation", "riot",
+    "invasion", "massacre", "revolution", "assassinat",
+    "coup", "siege", "bombing", "genocide", "uprising", "rebellion",
+    "military", "army", "troops", "conquest", "occupation", "riot",
 ]
 
 # Fixed character description — repeated every single call.
@@ -63,8 +63,8 @@ individual's likeness generic rather than exact.
 """.strip()
 
 FALLBACK_EVENT = {
-"year": None,
-"text": "just an ordinary day, nothing of note recorded",
+    "year": None,
+    "text": "just an ordinary day, nothing of note recorded",
 }
 
 LOCATION_RULE = """
@@ -115,120 +115,120 @@ three extra lines described below.
 
 
 def fetch_todays_event() -> dict:
-"""Pull today's on-this-day events from Wikimedia, prefer a
-   war/conflict-related one, fall back to any event, then to a
-   generic placeholder if the feed is unreachable."""
-today = date.today()
-url = ONTHISDAY_URL.format(month=f"{today.month:02d}", day=f"{today.day:02d}")
-try:
-resp = requests.get(url, headers={"User-Agent": "barry-and-susan/1.0"}, timeout=30)
-resp.raise_for_status()
-events = resp.json().get("events", [])
-except Exception as e:
-print(f"Could not fetch on-this-day events, using fallback: {e}")
-return FALLBACK_EVENT
+    """Pull today's on-this-day events from Wikimedia, prefer a
+       war/conflict-related one, fall back to any event, then to a
+       generic placeholder if the feed is unreachable."""
+    today = date.today()
+    url = ONTHISDAY_URL.format(month=f"{today.month:02d}", day=f"{today.day:02d}")
+    try:
+        resp = requests.get(url, headers={"User-Agent": "barry-and-susan/1.0"}, timeout=30)
+        resp.raise_for_status()
+        events = resp.json().get("events", [])
+    except Exception as e:
+        print(f"Could not fetch on-this-day events, using fallback: {e}")
+        return FALLBACK_EVENT
 
-if not events:
-return FALLBACK_EVENT
+    if not events:
+        return FALLBACK_EVENT
 
-conflict_events = [
-e for e in events
-if any(kw in e.get("text", "").lower() for kw in CONFLICT_KEYWORDS)
-]
-pool = conflict_events if conflict_events else events
-return random.choice(pool)
+    conflict_events = [
+        e for e in events
+        if any(kw in e.get("text", "").lower() for kw in CONFLICT_KEYWORDS)
+    ]
+    pool = conflict_events if conflict_events else events
+    return random.choice(pool)
 
 
 def build_image_prompt(event: dict) -> str:
-year_bit = f" in {event['year']}" if event.get("year") else ""
-return f"{CHARACTER_BASE} {IMAGE_SYSTEM_NOTE} Real event{year_bit}: {event['text']}."
+    year_bit = f" in {event['year']}" if event.get("year") else ""
+    return f"{CHARACTER_BASE} {IMAGE_SYSTEM_NOTE} Real event{year_bit}: {event['text']}."
 
 
 def _get_image_with_retry(url: str, max_attempts: int = 4) -> bytes:
-"""GET the image, retrying not just on bad HTTP status but also when
-   what comes back doesn't actually look like a real photo — a 200
-   response with an HTML/JSON error body, or a suspiciously tiny file,
-   would otherwise get silently written to disk as if it were fine."""
-MIN_IMAGE_BYTES = 15_000
-last_reason = None
-for attempt in range(1, max_attempts + 1):
-resp = requests.get(url, timeout=120)
-content_type = resp.headers.get("Content-Type", "")
+    """GET the image, retrying not just on bad HTTP status but also when
+       what comes back doesn't actually look like a real photo — a 200
+       response with an HTML/JSON error body, or a suspiciously tiny file,
+       would otherwise get silently written to disk as if it were fine."""
+    MIN_IMAGE_BYTES = 15_000
+    last_reason = None
+    for attempt in range(1, max_attempts + 1):
+        resp = requests.get(url, timeout=120)
+        content_type = resp.headers.get("Content-Type", "")
 
-if resp.status_code != 200:
-last_reason = f"HTTP {resp.status_code}"
-print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
-print(f"Response body: {resp.text[:500]}")
-elif not content_type.startswith("image/"):
-last_reason = f"non-image response (Content-Type: {content_type})"
-print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
-print(f"Response body: {resp.text[:500]}")
-elif len(resp.content) < MIN_IMAGE_BYTES:
-last_reason = f"suspiciously small image ({len(resp.content)} bytes) — likely a placeholder/blocked-content response"
-print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
-else:
-print(f"Got a valid image: {content_type}, {len(resp.content)} bytes")
-return resp.content
+        if resp.status_code != 200:
+            last_reason = f"HTTP {resp.status_code}"
+            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+            print(f"Response body: {resp.text[:500]}")
+        elif not content_type.startswith("image/"):
+            last_reason = f"non-image response (Content-Type: {content_type})"
+            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+            print(f"Response body: {resp.text[:500]}")
+        elif len(resp.content) < MIN_IMAGE_BYTES:
+            last_reason = f"suspiciously small image ({len(resp.content)} bytes) — likely a placeholder/blocked-content response"
+            print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+        else:
+            print(f"Got a valid image: {content_type}, {len(resp.content)} bytes")
+            return resp.content
 
-wait = 5 * attempt
-print(f"Retrying in {wait}s...")
-time.sleep(wait)
+        wait = 5 * attempt
+        print(f"Retrying in {wait}s...")
+        time.sleep(wait)
 
-raise RuntimeError(f"Gave up after {max_attempts} attempts. Last reason: {last_reason}")
+    raise RuntimeError(f"Gave up after {max_attempts} attempts. Last reason: {last_reason}")
 
 
 def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
-"""POST to Groq's OpenAI-compatible chat completions endpoint,
-   retrying on 429/5xx with backoff, surfacing the actual error body
-   on failure rather than a bare status code."""
-headers = {
-"Authorization": f"Bearer {GROQ_API_KEY}",
-"Content-Type": "application/json",
-}
-last_error = None
-for attempt in range(1, max_attempts + 1):
-resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=120)
-if resp.status_code == 200:
-return resp.json()
+    """POST to Groq's OpenAI-compatible chat completions endpoint,
+       retrying on 429/5xx with backoff, surfacing the actual error body
+       on failure rather than a bare status code."""
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
 
-print(f"Attempt {attempt}/{max_attempts} failed: HTTP {resp.status_code}")
-print(f"Response body: {resp.text[:500]}")
+        print(f"Attempt {attempt}/{max_attempts} failed: HTTP {resp.status_code}")
+        print(f"Response body: {resp.text[:500]}")
 
-if resp.status_code == 429 or resp.status_code >= 500:
-last_error = resp
-wait = 2 ** attempt
-print(f"Retrying in {wait}s...")
-time.sleep(wait)
-continue
+        if resp.status_code == 429 or resp.status_code >= 500:
+            last_error = resp
+            wait = 2 ** attempt
+            print(f"Retrying in {wait}s...")
+            time.sleep(wait)
+            continue
 
-resp.raise_for_status()  # non-retryable — fail immediately
+        resp.raise_for_status()  # non-retryable — fail immediately
 
-raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
+    raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
 
 
 def generate_image(prompt: str) -> bytes:
-MAX_PROMPT_CHARS = 1500
-if len(prompt) > MAX_PROMPT_CHARS:
-print(f"Prompt is {len(prompt)} chars, trimming to {MAX_PROMPT_CHARS}")
-prompt = prompt[:MAX_PROMPT_CHARS]
-encoded = urllib.parse.quote(prompt)
-url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true"
-return _get_image_with_retry(url)
+    MAX_PROMPT_CHARS = 1500
+    if len(prompt) > MAX_PROMPT_CHARS:
+        print(f"Prompt is {len(prompt)} chars, trimming to {MAX_PROMPT_CHARS}")
+        prompt = prompt[:MAX_PROMPT_CHARS]
+    encoded = urllib.parse.quote(prompt)
+    url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true"
+    return _get_image_with_retry(url)
 
 
 def generate_story(event: dict) -> dict:
-if not GROQ_API_KEY:
-raise RuntimeError("GROQ_API_KEY not set")
-year_bit = f" (year: {event['year']})" if event.get("year") else ""
-prompt = f"{STORY_SYSTEM_PROMPT}\n\nReal event{year_bit}: {event['text']}"
-payload = {
-"model": GROQ_MODEL,
-"max_tokens": 500,
-"messages": [{"role": "user", "content": prompt}],
-}
-data = _groq_post_with_retry(payload)
-raw = data["choices"][0]["message"]["content"].strip()
-return parse_story_response(raw)
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY not set")
+    year_bit = f" (year: {event['year']})" if event.get("year") else ""
+    prompt = f"{STORY_SYSTEM_PROMPT}\n\nReal event{year_bit}: {event['text']}"
+    payload = {
+        "model": GROQ_MODEL,
+        "max_tokens": 500,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    data = _groq_post_with_retry(payload)
+    raw = data["choices"][0]["message"]["content"].strip()
+    return parse_story_response(raw)
 
 
 def parse_story_response(raw: str) -> dict:
@@ -267,6 +267,7 @@ def parse_story_response(raw: str) -> dict:
         "winner_line": winner_line,
     }
 
+
 def geocode_location(place_name: str) -> dict | None:
     """Look up lat/lon for a place name via Nominatim (OpenStreetMap's
     free geocoder — no key, no billing). Best-effort: returns None on
@@ -293,58 +294,58 @@ def geocode_location(place_name: str) -> dict | None:
 
 
 def main():
-event = fetch_todays_event()
-print(f"Event: {event.get('year')} — {event['text']}")
+    event = fetch_todays_event()
+    print(f"Event: {event.get('year')} — {event['text']}")
 
-image_prompt = build_image_prompt(event)
-image_bytes = generate_image(image_prompt)
+    image_prompt = build_image_prompt(event)
+    image_bytes = generate_image(image_prompt)
 
-story_data = None
-try:
-story_data = generate_story(event)
-print(f"Story: {story_data['story']}")
+    story_data = None
+    try:
+        story_data = generate_story(event)
+        print(f"Story: {story_data['story']}")
         print(f"Location: {story_data['location_name']}")
-print(f"Regret: {story_data['regret_percent']}% — {story_data['regret_line']}")
-print(f"Winner: {story_data['winner_line']}")
-except Exception as e:
-print(f"Story generation failed, publishing image without it: {e}")
-story_data = {
-"story": "Barry and Susan witnessed today's history, but the report went unwritten.",
+        print(f"Regret: {story_data['regret_percent']}% — {story_data['regret_line']}")
+        print(f"Winner: {story_data['winner_line']}")
+    except Exception as e:
+        print(f"Story generation failed, publishing image without it: {e}")
+        story_data = {
+            "story": "Barry and Susan witnessed today's history, but the report went unwritten.",
             "location_name": None,
-"regret_percent": None,
-"regret_line": None,
-"winner_line": None,
-}
+            "regret_percent": None,
+            "regret_line": None,
+            "winner_line": None,
+        }
 
     coords = geocode_location(story_data["location_name"])
     if coords:
         print(f"Coordinates: {coords['lat']}, {coords['lon']}")
 
-os.makedirs("docs", exist_ok=True)
-with open("docs/today.png", "wb") as f:
-f.write(image_bytes)
+    os.makedirs("docs", exist_ok=True)
+    with open("docs/today.png", "wb") as f:
+        f.write(image_bytes)
 
-with open("docs/today.json", "w") as f:
-json.dump(
-{
-"date": date.today().isoformat(),
-"event_year": event.get("year"),
-"event_text": event["text"],
-"story": story_data["story"],
+    with open("docs/today.json", "w") as f:
+        json.dump(
+            {
+                "date": date.today().isoformat(),
+                "event_year": event.get("year"),
+                "event_text": event["text"],
+                "story": story_data["story"],
                 "location_name": story_data["location_name"],
                 "lat": coords["lat"] if coords else None,
                 "lon": coords["lon"] if coords else None,
-"regret_percent": story_data["regret_percent"],
-"regret_line": story_data["regret_line"],
-"winner_line": story_data["winner_line"],
-"generated_at": datetime.now(timezone.utc).isoformat(),
-},
-f,
-indent=2,
-)
+                "regret_percent": story_data["regret_percent"],
+                "regret_line": story_data["regret_line"],
+                "winner_line": story_data["winner_line"],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            f,
+            indent=2,
+        )
 
-print("Wrote docs/today.png and docs/today.json")
+    print("Wrote docs/today.png and docs/today.json")
 
 
 if __name__ == "__main__":
-sys.exit(main())
+    sys.exit(main())
