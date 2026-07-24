@@ -46,37 +46,24 @@ CONFLICT_KEYWORDS = [
 # Fixed character description — repeated every single call.
 # Consistency comes from restating this every time, not from the model remembering.
 CHARACTER_BASE = """
-Photorealistic photograph, not an illustration or painting — real
-pigeons, real feather detail, real photographic lighting and depth
-of field, shot like genuine street/documentary photography. Two
-real pigeons, each wearing a small handwritten paper or fabric tag
-on a loop of string around its neck: one reads "BARRY", the other
-reads "SUSAN" — this tag is how they're identified, since real
-pigeons otherwise look similar. Same two pigeons, same tags, every
-time.
+Photorealistic photo, not illustration. Two real pigeons, each with
+a small handwritten tag on a string around its neck: one reads
+BARRY, one reads SUSAN. Same two pigeons, same tags, every time.
 """.strip()
 
 PHOTO_ERA_PRE_PHOTOGRAPHY = """
-Photography did not exist yet in this era — lean into that as part
-of the joke. Style the image as an aged, damaged sepia photographic
-print or tintype, complete with period-wrong anachronism (a pigeon
-wearing tiny era-accurate costume pieces, "impossibly" captured on
-film centuries early). Scratches, foxing, and photo-paper texture
-typical of a found antique photograph.
+Photography didn't exist yet — style as a damaged, aged sepia
+tintype photo, anachronistic but photographically real-looking.
 """.strip()
 
 PHOTO_ERA_EARLY_PHOTO = """
-Style as a genuine black-and-white or sepia-toned photograph typical
-of early photography (glass-plate/large-format look) — soft focus,
-period-correct tonal range, grain and paper texture consistent with
-a real surviving photograph from this era.
+Style as a genuine black-and-white or sepia photo typical of this
+era — period-correct grain and tone.
 """.strip()
 
 PHOTO_ERA_MODERN = """
-Style as a real modern photograph appropriate to the decade — for
-mid-20th-century events, black-and-white or faded period colour
-film grain; for recent decades, natural full-colour digital/film
-photography, candid and documentary in feel.
+Style as a real photo for the decade — black-and-white or faded film
+for mid-1900s, natural full colour for recent decades.
 """.strip()
 
 
@@ -94,19 +81,13 @@ def photo_era_note(event: dict) -> str:
 
 
 COMIC_DEVICES_RULE = """
-No cartoon speech bubbles or illustrated captions — this is a
-photograph, not a comic. Any text should only appear where it would
-plausibly exist in the real photographed scene (a sign, a museum
-placard, a newspaper) or on the pigeons' own name tags. Include real
-supporting people/crowd/setting details appropriate to the event
-where relevant, shot in the same photographic style.
+No cartoon speech bubbles — this is a photo. Text only where
+plausible in-scene (a sign, a placard, the name tags).
 """.strip()
 
 BACKGROUND_RULE = """
-Full, real, physically plausible setting appropriate to the event —
-real architecture, real costume/props, real depth of field with the
-background naturally soft-focused behind the pigeons in the way a
-genuine photograph would render it.
+Real, physically plausible setting for the event, natural
+photographic depth of field.
 """.strip()
 
 FALLBACK_EVENT = {
@@ -119,26 +100,21 @@ FALLBACK_EVENT = {
 # Anything more recent stays generic/witness-only — that's roughly where
 # "safely satirical history" shades into "real people within living
 # memory," so it's a reasonable, defensible line rather than an arbitrary one.
-PERIOD_THRESHOLD_YEARS = 1
+PERIOD_THRESHOLD_YEARS = 100
 
 IMAGE_NOTE_PERIOD = """
-Barry and Susan (identifiable by their name tags) wear small, real,
-physically plausible props/costume pieces evoking the actual
-historical figures central to this event — a tiny crown or hat, a
-scrap of period-accurate fabric, a small prop — as if a real pigeon
-had been dressed up for the shot, playful and slightly absurd rather
-than a full costume transformation. Other real pigeons can appear as
-a supporting "cast" similarly dressed if it suits the scene. 
+Barry and Susan wear small real props/costume pieces evoking the
+historical figures in this event (tiny hat, scrap of period fabric)
+— playful, not a full costume. Other real pigeons may appear
+similarly dressed as extras. No graphic violence, implied only.
 """.strip()
 
 IMAGE_NOTE_MODERN = """
-Barry and Susan (identifiable by their name tags) are small real
-pigeons tucked into a corner of a real, physically plausible scene
-appropriate to the event, wearing at most a tiny, subtle accessory
-rather than a full costume. Real human figures relevant to the event
-(officials, soldiers, crowds as relevant) appear in the background,
-photographed naturally — do not attempt a specific real named
-individual's actual likeness.
+Barry and Susan are small pigeons in the corner of a real scene for
+this event, at most one subtle accessory. Real people relevant to
+the event appear naturally in the background, generic/anonymous, not
+a specific real person's likeness. No glorifying real atrocities,
+hate symbols, or terrorism; keep it generic and focus on the pigeons.
 """.strip()
 
 REGRET_WINNER_RULE = """
@@ -161,7 +137,7 @@ of historians, arms manufacturers, bureaucracy, nobody at all. Think
 smaller-scale or modern tragedies involving real identifiable victims,
 keep this line understated and somber rather than jokey — a short,
 genuine line like "No one. There's no winner in this one." is exactly
-right there; do not force a punchline onto real, recent grief. Focus on british humour
+right there; do not force a punchline onto real, recent grief.
 """.strip()
 
 HEADLINE_RULE = """
@@ -208,7 +184,7 @@ adds something — never force a phonetic accent as decoration, it
 should read as clean, sharp prose above all else. The historical
 facts must be completely accurate and specific: real names, real
 terms, real numbers, real outcomes. No preamble beyond the headline
-line, then the paragraph, then the two extra lines described below. 
+line, then the paragraph, then the two extra lines described below.
 
 {regret_winner_rule}
 """.format(regret_winner_rule=REGRET_WINNER_RULE, headline_rule=HEADLINE_RULE).strip()
@@ -340,6 +316,13 @@ def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
 
 
 def generate_image(prompt: str) -> bytes:
+    # Pollinations' image endpoint takes the prompt in the URL path itself
+    # (no POST body), so an overly long prompt can 404 rather than fail
+    # with a clearer error. Cap it defensively.
+    MAX_PROMPT_CHARS = 1500
+    if len(prompt) > MAX_PROMPT_CHARS:
+        print(f"Prompt is {len(prompt)} chars, trimming to {MAX_PROMPT_CHARS}")
+        prompt = prompt[:MAX_PROMPT_CHARS]
     encoded = urllib.parse.quote(prompt)
     url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true"
     resp = _get_with_retry(url)
