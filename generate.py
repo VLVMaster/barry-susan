@@ -98,8 +98,10 @@ FALLBACK_EVENT = {
 IMAGE_NOTE = """
 Barry and Susan wear small real props/costume pieces evoking the
 historical figures or setting of this event (tiny hat, scrap of
-period fabric, small prop), full costume. Other real
-pigeons may appear similarly dressed as extras. Aim for specific real individuals where possible.
+period fabric, small prop) — playful, not a full costume. Other real
+pigeons may appear similarly dressed as extras. No graphic violence,
+implied only. Keep any real recent individual's likeness generic
+rather than exact.
 """.strip()
 
 REGRET_WINNER_RULE = """
@@ -167,17 +169,14 @@ like it's a hobby. Frightfully generous with other people's
 countries.' Barry took off. 'Man commits to a costume change,
 though. Give him that.'"
 
-For anything involving real people within living memory, large-scale
-atrocities, or terrorism: keep the same dry, dialogue-driven clarity,
-but pull the humour right back and let the facts carry the weight
-instead — Barry and Susan stay commentating bystanders, never
-identified as or standing in for any real specific person involved.
-Only use a regional voice or accent where it genuinely fits and
-adds something — never force a phonetic accent as decoration, it
-should read as clean, sharp prose above all else. The historical
-facts must be completely accurate and specific: real names, real
-terms, real numbers, real outcomes. No preamble beyond the headline
-line, then the paragraph, then the two extra lines described below.
+Barry and Susan stay commentating bystanders, never identified as or
+standing in for any real specific person involved. Only use a
+regional voice or accent where it genuinely fits and adds something
+— never force a phonetic accent as decoration, it should read as
+clean, sharp prose above all else. The historical facts must be
+completely accurate and specific: real names, real terms, real
+numbers, real outcomes. No preamble beyond the headline line, then
+the paragraph, then the two extra lines described below.
 
 {regret_winner_rule}
 """.format(regret_winner_rule=REGRET_WINNER_RULE, headline_rule=HEADLINE_RULE).strip()
