@@ -50,10 +50,10 @@ Two cartoon pigeons in a warm, flat, gently retro illustration style,
 bold outlines, limited earthy-plus-one-accent-colour palette, simple
 shading, a children's-book-illustration feel, no photorealism.
 Barry: a slightly round, scruffy grey pigeon, always looks a bit
-pleased with himself. Susan: a sleeker, iridescent green-and-purple-
+pleased with himself and he wears red adidas tracksuit bottoms. Susan: a sleeker, iridescent green-and-purple-
 necked pigeon with small round glasses, always looks like she's the
-one actually in charge. Always shown together, same two characters,
-same underlying style.
+one actually in charge with ginger hair. Always shown together, same two characters,
+same underlying style and they love each other.
 """.strip()
 
 BACKGROUND_RULE = """
@@ -64,13 +64,13 @@ no gradient, no texture.
 """.format(bg_hex=PAGE_BACKGROUND_HEX).strip()
 
 IMAGE_SYSTEM_NOTE = """
-Depict Barry and Susan as onlookers present at the scene, dressed in
-clothing typical of the event's time and place. Do not depict them
-as, or give them the likeness of, any specific real historical
-individual — they remain the same two pigeon characters, just
-dressed for the era. No readable text, flags, or symbols associated
-with real hate movements or atrocities should be rendered in detail;
-keep any such elements implied and minimal rather than depicted.
+Go full costume-drama: Barry, Susan, and a supporting cast of other
+pigeons are dressed and posed AS the actual historical figures central
+to this event — a pigeon-monarch, pigeon-soldiers, pigeon-courtiers,
+whoever the event calls for — playing it out like an am-dram school
+history pageant. Exaggerated, silly, larger-than-life expressions and
+poses, in the same lively children's-storybook illustration style.
+Costume and setting should be recognisably of the era. If possible, dress them up as the individuals involved if possible and relevant. 
 """.strip()
 
 FALLBACK_EVENT = {
@@ -79,17 +79,17 @@ FALLBACK_EVENT = {
 }
 
 STORY_SYSTEM_PROMPT = """
-You write a single short paragraph (70-110 words) about a real
-historical event, narrated as if Barry and Susan — two pigeons — were
-small, incidental witnesses to it. The historical facts you state
-must be accurate to the real event given below: real dates, real
-outcomes, real consequences. Barry and Susan only observe and react
-in a couple of light asides; they are not participants and are never
-identified as, or compared to, any specific real person involved.
-Match your tone to the actual weight of the event — plainly factual
-and restrained for anything grave, wry and playful only where the
-event itself is genuinely light. No preamble, no title, just the
-paragraph itself.
+You write a single paragraph (90-130 words), genuinely ridiculous and
+fun to read, narrating a real historical event as if Barry and Susan
+— two pigeons — are playing the actual historical figures involved,
+am-dram school-pageant style, hamming it up shamelessly. Feel free to
+lean into broad, silly, widely-loved comic voices where they fit
+(cheeky regional accents written phonetically, deadpan asides,
+whatever makes it fun to read aloud) — the goal is genuinely
+entertaining, shareable, laugh-out-loud. The historical
+facts underneath the silliness must stay completely accurate: real
+outcomes, real consequences, real detail. No preamble, no title,
+just the paragraph.
 """.strip()
 
 
