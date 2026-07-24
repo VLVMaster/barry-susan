@@ -95,7 +95,6 @@ systems and institutions, not at accusing a real person of a crime.
 """.strip()
 
 STORY_SYSTEM_PROMPT = """
-You write a single paragraph (200-250 words) narrating a real
 You write a single paragraph (100-150 words) narrating a real
 historical event, in the voice of Barry and Susan — two pigeons who
 are right there in the middle of it, reacting to what's unfolding
@@ -106,15 +105,12 @@ the gap between tone and content do the comedic work. This is a
 satirical, not a slapstick, register — closer to a dry aside at a
 funeral than a pantomime. The historical facts underneath the wit
 must stay completely accurate: real outcomes, real consequences,
-real detail. No preamble, no title, just the paragraph, then the two
-extra lines described below.
 real detail. No preamble, no title, just the paragraph, then the
 three extra lines described below.
 
 {location_rule}
 
 {regret_winner_rule}
-""".format(regret_winner_rule=REGRET_WINNER_RULE).strip()
 """.format(location_rule=LOCATION_RULE, regret_winner_rule=REGRET_WINNER_RULE).strip()
 
 
@@ -236,45 +232,40 @@ return parse_story_response(raw)
 
 
 def parse_story_response(raw: str) -> dict:
-    """Split the model's reply into the main paragraph plus REGRET and
-    WINNER lines. Falls back gracefully if the model didn't follow the
-    format exactly — the paragraph still gets published either way."""
     """Split the model's reply into the main paragraph plus LOCATION,
     REGRET, and WINNER lines. Falls back gracefully if the model didn't
     follow the format exactly — the paragraph still gets published
     either way."""
-paragraph_lines = []
+    paragraph_lines = []
     location_name = None
-regret_percent = None
-regret_line = None
-winner_line = None
+    regret_percent = None
+    regret_line = None
+    winner_line = None
 
-for line in raw.splitlines():
-stripped = line.strip()
-        if stripped.upper().startswith("REGRET:"):
+    for line in raw.splitlines():
+        stripped = line.strip()
         if stripped.upper().startswith("LOCATION:"):
             location_name = stripped.split(":", 1)[1].strip()
         elif stripped.upper().startswith("REGRET:"):
-rest = stripped.split(":", 1)[1].strip()
-if "|" in rest:
-pct, txt = rest.split("|", 1)
-regret_percent = pct.strip().rstrip("%")
-regret_line = txt.strip()
-else:
-regret_line = rest
-elif stripped.upper().startswith("WINNER:"):
-winner_line = stripped.split(":", 1)[1].strip()
-elif stripped:
-paragraph_lines.append(stripped)
+            rest = stripped.split(":", 1)[1].strip()
+            if "|" in rest:
+                pct, txt = rest.split("|", 1)
+                regret_percent = pct.strip().rstrip("%")
+                regret_line = txt.strip()
+            else:
+                regret_line = rest
+        elif stripped.upper().startswith("WINNER:"):
+            winner_line = stripped.split(":", 1)[1].strip()
+        elif stripped:
+            paragraph_lines.append(stripped)
 
-return {
-"story": " ".join(paragraph_lines).strip(),
+    return {
+        "story": " ".join(paragraph_lines).strip(),
         "location_name": location_name,
-"regret_percent": regret_percent,
-"regret_line": regret_line,
-"winner_line": winner_line,
-}
-
+        "regret_percent": regret_percent,
+        "regret_line": regret_line,
+        "winner_line": winner_line,
+    }
 
 def geocode_location(place_name: str) -> dict | None:
     """Look up lat/lon for a place name via Nominatim (OpenStreetMap's
