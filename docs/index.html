@@ -21,10 +21,10 @@
   }
   h1 {
     font-weight: normal;
-    font-size: 1.1rem;
-    letter-spacing: 0.02em;
-    margin: 0 0 0.3em;
-    opacity: 0.85;
+    font-size: 1.6rem;
+    line-height: 1.25;
+    letter-spacing: 0.01em;
+    margin: 0 0 0.25em;
   }
   h2 {
     font-weight: normal;
@@ -78,7 +78,7 @@
 </head>
 <body>
   <div class="page">
-    <h1>Barry and Susan</h1>
+    <h1 id="headline">Loading today's history…</h1>
     <h2 id="year"></h2>
     <img id="pic" src="today.png" alt="Barry and Susan">
     <p class="story" id="story">Loading today's nonsense…</p>
@@ -103,6 +103,7 @@
     fetch('today.json?v=' + stamp)
       .then(r => r.json())
       .then(data => {
+        document.getElementById('headline').textContent = data.headline || 'On this day…';
         document.getElementById('story').textContent = data.story || '';
         if (data.event_year) {
           document.getElementById('year').textContent = 'On this day, ' + data.event_year;
