@@ -5,7 +5,7 @@ Generates today's Barry & Susan illustration + story, based on a real
 
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
 
-- Image: Pollinations.ai (free, no key)
+- Image: Pollinations.ai (free tier, needs a pk_ App Key)
 - Story: Groq (free tier, no credit card, needs GROQ_API_KEY)
 - History: Wikimedia on-this-day feed (free, no key)
 """
@@ -19,12 +19,13 @@ from datetime import date, datetime, timezone
 
 import requests
 
-# gen.pollinations.ai requires an API key now (confirmed 401 on image
-# requests, not just text) — image.pollinations.ai/prompt is the actual
-# documented anonymous, no-key path. It 404'd earlier in this build with
-# a much longer/more complex prompt; now that the prompt is shorter and
-# length-capped below, worth trying again rather than assuming it's dead.
-IMAGE_BASE_URL = "https://image.pollinations.ai/prompt"
+# Pollinations.ai's old anonymous endpoint (image.pollinations.ai/prompt)
+# started returning bare 404s — they moved image generation behind
+# gen.pollinations.ai/image and now require an API key. Using a pk_ App
+# Key (from enter.pollinations.ai/keys), which is designed to be safe even
+# if it leaks — unlike an sk_ secret key — passed as a `key` query param.
+IMAGE_BASE_URL = "https://gen.pollinations.ai/image"
+POLLINATIONS_API_KEY = os.environ.get("POLLINATIONS_API_KEY")
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -207,12 +208,15 @@ def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
 
 
 def generate_image(prompt: str) -> bytes:
+    if not POLLINATIONS_API_KEY:
+        raise RuntimeError("POLLINATIONS_API_KEY not set")
     MAX_PROMPT_CHARS = 1500
     if len(prompt) > MAX_PROMPT_CHARS:
         print(f"Prompt is {len(prompt)} chars, trimming to {MAX_PROMPT_CHARS}")
         prompt = prompt[:MAX_PROMPT_CHARS]
     encoded = urllib.parse.quote(prompt)
-    url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true"
+    key = urllib.parse.quote(POLLINATIONS_API_KEY)
+    url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true&key={key}"
     return _get_image_with_retry(url)
 
 
