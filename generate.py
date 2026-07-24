@@ -5,7 +5,7 @@ Generates today's Barry & Susan illustration + story, based on a real
 
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
 
-- Image: Pollinations.ai (free tier, needs a pk_ App Key)
+- Image: Hugging Face Inference API (free tier, needs HF_TOKEN)
 - Story: Groq (free tier, no credit card, needs GROQ_API_KEY)
 - History: Wikimedia on-this-day feed (free, no key)
 """
@@ -14,18 +14,18 @@ import os
 import random
 import sys
 import time
-import urllib.parse
 from datetime import date, datetime, timezone
 
 import requests
 
-# Pollinations.ai's old anonymous endpoint (image.pollinations.ai/prompt)
-# started returning bare 404s — they moved image generation behind
-# gen.pollinations.ai/image and now require an API key. Using a pk_ App
-# Key (from enter.pollinations.ai/keys), which is designed to be safe even
-# if it leaks — unlike an sk_ secret key — passed as a `key` query param.
-IMAGE_BASE_URL = "https://gen.pollinations.ai/image"
-POLLINATIONS_API_KEY = os.environ.get("POLLINATIONS_API_KEY")
+# Pollinations.ai's anonymous image endpoint bare-404'd, and its
+# successor (gen.pollinations.ai/image with a pk_ App Key) turned out to
+# require a funded balance, not actually free. Hugging Face's Inference
+# API is genuinely free (no payment required) at the cost of needing an
+# HF_TOKEN and occasional cold-start waits.
+HF_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
+HF_IMAGE_API_URL = f"https://api-inference.huggingface.co/models/{HF_IMAGE_MODEL}"
+HF_TOKEN = os.environ.get("HF_TOKEN")
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -145,18 +145,34 @@ def build_image_prompt(event: dict) -> str:
     return f"{CHARACTER_BASE} {IMAGE_SYSTEM_NOTE} Real event{year_bit}: {event['text']}."
 
 
-def _get_image_with_retry(url: str, max_attempts: int = 4) -> bytes:
-    """GET the image, retrying not just on bad HTTP status but also when
-       what comes back doesn't actually look like a real photo — a 200
-       response with an HTML/JSON error body, or a suspiciously tiny file,
-       would otherwise get silently written to disk as if it were fine."""
+def _query_hf_image_with_retry(prompt: str, max_attempts: int = 4) -> bytes:
+    """POST the prompt to the HF Inference API, retrying not just on bad
+       HTTP status but also when what comes back doesn't actually look
+       like a real photo — a 200 response with a JSON error body, or a
+       suspiciously tiny file, would otherwise get silently written to
+       disk as if it were fine. A 503 means the model is cold-starting,
+       which HF reports with an estimated_time to wait before retrying."""
+    if not HF_TOKEN:
+        raise RuntimeError("HF_TOKEN not set")
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     MIN_IMAGE_BYTES = 15_000
     last_reason = None
     for attempt in range(1, max_attempts + 1):
-        resp = requests.get(url, timeout=120)
+        resp = requests.post(
+            HF_IMAGE_API_URL, headers=headers, json={"inputs": prompt}, timeout=120
+        )
         content_type = resp.headers.get("Content-Type", "")
 
-        if resp.status_code != 200:
+        if resp.status_code == 503:
+            try:
+                wait = float(resp.json().get("estimated_time", 20))
+            except Exception:
+                wait = 20
+            last_reason = "model is loading (503)"
+            print(f"Attempt {attempt}/{max_attempts}: {last_reason}, waiting {wait:.0f}s...")
+            time.sleep(wait)
+            continue
+        elif resp.status_code != 200:
             last_reason = f"HTTP {resp.status_code}"
             print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
             print(f"Response body: {resp.text[:500]}")
@@ -208,16 +224,11 @@ def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
 
 
 def generate_image(prompt: str) -> bytes:
-    if not POLLINATIONS_API_KEY:
-        raise RuntimeError("POLLINATIONS_API_KEY not set")
     MAX_PROMPT_CHARS = 1500
     if len(prompt) > MAX_PROMPT_CHARS:
         print(f"Prompt is {len(prompt)} chars, trimming to {MAX_PROMPT_CHARS}")
         prompt = prompt[:MAX_PROMPT_CHARS]
-    encoded = urllib.parse.quote(prompt)
-    key = urllib.parse.quote(POLLINATIONS_API_KEY)
-    url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true&key={key}"
-    return _get_image_with_retry(url)
+    return _query_hf_image_with_retry(prompt)
 
 
 def generate_story(event: dict) -> dict:
