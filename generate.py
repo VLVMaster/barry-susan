@@ -51,13 +51,7 @@ same tags, every time.
 
 IMAGE_SYSTEM_NOTE = """
 Barry and Susan are physically present in the scene, right in among
-the real historical event, as if actually photographed there — not
-off to the side, not a small background detail, genuinely part of
-the shot. They may wear small real props/costume pieces evoking the
-event or figures involved (a tiny hat, a scrap of period fabric). 
-The rest of the scene (people, setting,
-architecture) is real and photographically plausible for the time
-and place. 
+the real historical event, as if actually photographed there.
 """.strip()
 
 FALLBACK_EVENT = {
@@ -86,7 +80,7 @@ systems and institutions, not at accusing a real person of a crime.
 """.strip()
 
 STORY_SYSTEM_PROMPT = """
-You write a single paragraph (100-150 words) narrating a real
+You write a single paragraph (200-250 words) narrating a real
 historical event, in the voice of Barry and Susan — two pigeons who
 are right there in the middle of it, reacting to what's unfolding
 around them. Write in a distinctly British, Blackadder-style deadpan
