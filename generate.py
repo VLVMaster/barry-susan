@@ -24,16 +24,12 @@ from datetime import date, datetime, timezone
 
 import requests
 
-IMAGE_BASE_URL = "https://pollinations.ai/p"
+IMAGE_BASE_URL = "https://gen.pollinations.ai/image"
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-
-# Page background colour — the image is generated on this exact colour so it
-# sits on the page with no visible edge/box around the characters.
-PAGE_BACKGROUND_HEX = "#F5EFE1"
 
 # Bias event selection toward war/conflict when possible, per preference —
 # falls back to any event on days where nothing matches.
@@ -43,65 +39,19 @@ CONFLICT_KEYWORDS = [
     "military", "army", "troops", "conquest", "occupation", "riot",
 ]
 
-# Fixed character description — repeated every single call.
-# Consistency comes from restating this every time, not from the model remembering.
-CHARACTER_BASE = """
-Photorealistic photo, not illustration. Two real pigeons, each with
-a small handwritten tag on a string around its neck: one reads
-BARRY, one reads SUSAN. Same two pigeons, same tags, every time.
-""".strip()
-
-PHOTO_ERA_PRE_PHOTOGRAPHY = """
-Photography didn't exist yet — style as a damaged, aged sepia
-tintype photo, anachronistic but photographically real-looking.
-""".strip()
-
-PHOTO_ERA_EARLY_PHOTO = """
-Style as a genuine black-and-white or sepia photo typical of this
-era — period-correct grain and tone.
-""".strip()
-
-PHOTO_ERA_MODERN = """
-Style as a real photo for the decade — black-and-white or faded film
-for mid-1900s, natural full colour for recent decades.
-""".strip()
-
-
-def photo_era_note(event: dict) -> str:
-    """Picks a photographic treatment matching the real history of
-    photography — the joke does double duty as a consistency device."""
-    year = event.get("year")
-    if year is None:
-        return PHOTO_ERA_MODERN
-    if year < 1850:
-        return PHOTO_ERA_PRE_PHOTOGRAPHY
-    if year < 1950:
-        return PHOTO_ERA_EARLY_PHOTO
-    return PHOTO_ERA_MODERN
-
-
-COMIC_DEVICES_RULE = """
-No cartoon speech bubbles — this is a photo. Text only where
-plausible in-scene (a sign, a placard, the name tags).
-""".strip()
-
-BACKGROUND_RULE = """
-Real, physically plausible setting for the event, natural
-photographic depth of field.
-""".strip()
-
 FALLBACK_EVENT = {
     "year": None,
     "text": "just an ordinary day, nothing of note recorded",
 }
 
+# Single, simple image prompt: a photo of the event as witnessed by two
+# pigeons. Kept short and plain — easier to render reliably than a
+# prompt built from several stacked instruction blocks.
 IMAGE_NOTE = """
-Barry and Susan wear small real props/costume pieces evoking the
-historical figures or setting of this event (tiny hat, scrap of
-period fabric, small prop) — playful, not a full costume. Other real
-pigeons may appear similarly dressed as extras. No graphic violence,
-implied only. Keep any real recent individual's likeness generic
-rather than exact.
+Realistic photo of two real pigeons, Barry and Susan, each with a
+small handwritten name tag on a string around its neck, witnessing
+this historical event as if photographed at the scene. Natural
+photographic lighting, real setting for the event's time and place.
 """.strip()
 
 REGRET_WINNER_RULE = """
@@ -208,13 +158,8 @@ def fetch_todays_event() -> dict:
 
 
 def build_image_prompt(event: dict) -> str:
-    year_bit = f" set in the year {event['year']}," if event.get("year") else ""
-    era_note = photo_era_note(event)
-    return (
-        f"{CHARACTER_BASE} {IMAGE_NOTE} {era_note} {COMIC_DEVICES_RULE} {BACKGROUND_RULE} "
-        f"Today's real historical event,{year_bit} to reference for "
-        f"costume and setting only: {event['text']}."
-    )
+    year_bit = f" in {event['year']}" if event.get("year") else ""
+    return f"{IMAGE_NOTE} Event{year_bit}: {event['text']}."
 
 
 def _get_image_with_retry(url: str, max_attempts: int = 4) -> bytes:
