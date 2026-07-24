@@ -46,18 +46,12 @@ CONFLICT_KEYWORDS = [
 # Fixed character description — repeated every single call.
 # Consistency comes from restating this every time, not from the model remembering.
 CHARACTER_BASE = """
-Detailed hand-drawn illustration style — fine pencil and ink linework,
-soft cross-hatching and shading, muted sepia-and-watercolour palette
-on aged parchment, like a vintage engraved storybook illustration or
-an old natural-history print, NOT flat cartoon colour, NOT comic
-linework. Expressive, characterful faces despite the fine detail.
 Barry: a slightly round, scruffy grey pigeon, always looks a bit
 pleased with himself, wears red adidas tracksuit bottoms. Susan: a sleeker, iridescent green-and-purple-
 necked pigeon with ginger hair, always looks like she's the
 one actually in charge. Same two characters, same underlying style,
 every time.
 """.strip()
-
 
 BACKGROUND_RULE = """
 No scenery beyond what's specified below, no extra props. The area
@@ -72,8 +66,7 @@ pigeons are dressed and posed AS the actual historical figures central
 to this event — a pigeon-monarch, pigeon-soldiers, pigeon-courtiers,
 whoever the event calls for — playing it out like an am-dram school
 history pageant. Exaggerated, silly, larger-than-life expressions and
-poses, in the same lively children's-storybook illustration style.
-Costume and setting should be recognisably of the era. If possible, dress them up as the individuals involved if possible and relevant. 
+poses. Costume and setting should be recognisably of the era. If possible, dress them up as the individuals involved if possible and relevant. 
 """.strip()
 
 FALLBACK_EVENT = {
@@ -84,12 +77,7 @@ FALLBACK_EVENT = {
 STORY_SYSTEM_PROMPT = """
 You write a single paragraph (90-130 words), genuinely ridiculous and
 fun to read, narrating a real historical event as if Barry and Susan
-— two pigeons — are playing the actual historical figures involved,
-am-dram school-pageant style, hamming it up shamelessly. Feel free to
-lean into broad, silly, widely-loved comic voices where they fit
-(cheeky regional accents written phonetically, deadpan asides,
-whatever makes it fun to read aloud) — the goal is genuinely
-entertaining, shareable, laugh-out-loud. The historical
+— two pigeons — are witnessing it in real time. The historical
 facts underneath the silliness must stay completely accurate: real
 outcomes, real consequences, real detail. No preamble, no title,
 just the paragraph. Make it dark. 
