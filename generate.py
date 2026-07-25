@@ -10,7 +10,7 @@ event and its details are real and accurate; the pigeons are not.
 
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
 
-- Image: Pollinations.ai (free, no key)
+- Image: Hugging Face Inference API (free tier, needs HF_TOKEN)
 - Story: Groq (free tier, no credit card, needs GROQ_API_KEY)
 - History: Wikimedia on-this-day feed (free, no key)
 """
@@ -19,12 +19,23 @@ import os
 import random
 import sys
 import time
-import urllib.parse
 from datetime import date, datetime, timezone
 
 import requests
 
-IMAGE_BASE_URL = "https://gen.pollinations.ai/image"
+# Pollinations.ai went through several incompatible changes (anonymous
+# path 404ing, then requiring a pk_ key with an unfunded $0 balance) —
+# switched to Hugging Face's Inference API instead, which is free with
+# no payment required, just an HF_TOKEN. Tries each model in order and
+# moves on if one is retired/unavailable (404/410), rather than betting
+# everything on a single model name that might get deprecated later.
+HF_IMAGE_MODELS = [
+    "stabilityai/stable-diffusion-xl-base-1.0",
+    "runwayml/stable-diffusion-v1-5",
+    "CompVis/stable-diffusion-v1-4",
+]
+HF_ROUTER_URL = "https://router.huggingface.co/hf-inference/models/{model}"
+HF_TOKEN = os.environ.get("HF_TOKEN")
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -218,21 +229,52 @@ def build_image_prompt(event: dict) -> str:
     )
 
 
-def _get_with_retry(url: str, max_attempts: int = 4) -> requests.Response:
-    """GET with retry/backoff for the (unauthenticated, occasionally
-    flaky) Pollinations image endpoint."""
-    last_error = None
-    for attempt in range(1, max_attempts + 1):
-        resp = requests.get(url, timeout=120)
-        if resp.status_code == 200:
-            return resp
-        print(f"Attempt {attempt}/{max_attempts} failed: HTTP {resp.status_code}")
-        print(f"Response body: {resp.text[:500]}")
-        last_error = resp
-        wait = 5 * attempt
-        print(f"Retrying in {wait}s...")
-        time.sleep(wait)
-    raise RuntimeError(f"Gave up after {max_attempts} attempts. Last status: {last_error.status_code}")
+def _query_hf_image(prompt: str, max_attempts: int = 3) -> bytes:
+    """POST the prompt to HF's Inference API, trying each model in
+    HF_IMAGE_MODELS in turn. A 404/410 means that model is gone —
+    move on to the next one rather than retrying a dead model. A 503
+    means the model is cold-starting, which HF reports with an
+    estimated_time to wait before retrying the same model."""
+    if not HF_TOKEN:
+        raise RuntimeError("HF_TOKEN not set")
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    last_reason = None
+
+    for model in HF_IMAGE_MODELS:
+        url = HF_ROUTER_URL.format(model=model)
+        for attempt in range(1, max_attempts + 1):
+            resp = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=120)
+            content_type = resp.headers.get("Content-Type", "")
+
+            if resp.status_code in (404, 410):
+                last_reason = f"{model}: HTTP {resp.status_code} (model unavailable)"
+                print(f"{last_reason} — trying next model")
+                break
+            elif resp.status_code == 503:
+                try:
+                    wait = float(resp.json().get("estimated_time", 20))
+                except Exception:
+                    wait = 20
+                print(f"{model}: model is loading (503), waiting {wait:.0f}s...")
+                time.sleep(wait)
+                continue
+            elif resp.status_code != 200:
+                last_reason = f"{model}: HTTP {resp.status_code}"
+                print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+                print(f"Response body: {resp.text[:500]}")
+            elif not content_type.startswith("image/"):
+                last_reason = f"{model}: non-image response (Content-Type: {content_type})"
+                print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+                print(f"Response body: {resp.text[:500]}")
+            else:
+                print(f"Got a valid image from {model}: {content_type}, {len(resp.content)} bytes")
+                return resp.content
+
+            wait = 5 * attempt
+            print(f"Retrying in {wait}s...")
+            time.sleep(wait)
+
+    raise RuntimeError(f"Gave up on all HF models. Last reason: {last_reason}")
 
 
 def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
@@ -265,17 +307,11 @@ def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
 
 
 def generate_image(prompt: str) -> bytes:
-    # Pollinations' image endpoint takes the prompt in the URL path itself
-    # (no POST body), so an overly long prompt can 404 rather than fail
-    # with a clearer error. Cap it defensively.
     MAX_PROMPT_CHARS = 1500
     if len(prompt) > MAX_PROMPT_CHARS:
         print(f"Prompt is {len(prompt)} chars, trimming to {MAX_PROMPT_CHARS}")
         prompt = prompt[:MAX_PROMPT_CHARS]
-    encoded = urllib.parse.quote(prompt)
-    url = f"{IMAGE_BASE_URL}/{encoded}?width=1024&height=768&nologo=true"
-    resp = _get_with_retry(url)
-    return resp.content
+    return _query_hf_image(prompt)
 
 
 def generate_story(event: dict) -> dict:
