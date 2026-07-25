@@ -26,10 +26,15 @@ import requests
 # Pollinations.ai went through several incompatible changes (anonymous
 # path 404ing, then requiring a pk_ key with an unfunded $0 balance) —
 # switched to Hugging Face's Inference API instead, which is free with
-# no payment required, just an HF_TOKEN. Tries each model in order and
-# moves on if one is retired/unavailable (404/410), rather than betting
-# everything on a single model name that might get deprecated later.
-HF_IMAGE_MODELS = [
+# no payment required, just an HF_TOKEN. Which specific models the free
+# hf-inference provider serves has itself shifted more than once (a
+# hardcoded model list went from "works" to "three separate 400/410s"
+# within this same project), so the model to use is looked up at
+# request time from HF's own recommendation endpoint — the same
+# api/tasks lookup huggingface_hub's client uses internally when no
+# model is given — with a static list as a last-resort fallback.
+HF_TASKS_API_URL = "https://huggingface.co/api/tasks"
+HF_IMAGE_MODELS_FALLBACK = [
     "stabilityai/stable-diffusion-xl-base-1.0",
     "runwayml/stable-diffusion-v1-5",
     "CompVis/stable-diffusion-v1-4",
@@ -229,24 +234,48 @@ def build_image_prompt(event: dict) -> str:
     )
 
 
+def _fetch_recommended_hf_model() -> str | None:
+    """Ask HF which model it currently recommends for text-to-image —
+    the same api/tasks lookup huggingface_hub's own InferenceClient
+    does internally when no model is specified. Best-effort: returns
+    None on any failure so the caller falls back to the static list."""
+    try:
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
+        resp = requests.get(HF_TASKS_API_URL, headers=headers, timeout=30)
+        resp.raise_for_status()
+        widget_models = resp.json().get("text-to-image", {}).get("widgetModels", [])
+        return widget_models[0] if widget_models else None
+    except Exception as e:
+        print(f"Could not fetch HF's recommended model, using fallback list: {e}")
+        return None
+
+
 def _query_hf_image(prompt: str, max_attempts: int = 3) -> bytes:
-    """POST the prompt to HF's Inference API, trying each model in
-    HF_IMAGE_MODELS in turn. A 404/410 means that model is gone —
-    move on to the next one rather than retrying a dead model. A 503
-    means the model is cold-starting, which HF reports with an
-    estimated_time to wait before retrying the same model."""
+    """POST the prompt to HF's Inference API, trying each candidate
+    model in turn (HF's own current recommendation first, then the
+    static fallback list). A 404/410, or a 400 saying the model isn't
+    supported by this provider, means that model is gone — move on to
+    the next one rather than retrying a dead model. A 503 means the
+    model is cold-starting, which HF reports with an estimated_time to
+    wait before retrying the same model."""
     if not HF_TOKEN:
         raise RuntimeError("HF_TOKEN not set")
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     last_reason = None
 
-    for model in HF_IMAGE_MODELS:
+    recommended = _fetch_recommended_hf_model()
+    models = ([recommended] if recommended else []) + [
+        m for m in HF_IMAGE_MODELS_FALLBACK if m != recommended
+    ]
+
+    for model in models:
         url = HF_ROUTER_URL.format(model=model)
         for attempt in range(1, max_attempts + 1):
             resp = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=120)
             content_type = resp.headers.get("Content-Type", "")
 
-            if resp.status_code in (404, 410):
+            not_supported = resp.status_code == 400 and "not supported" in resp.text.lower()
+            if resp.status_code in (404, 410) or not_supported:
                 last_reason = f"{model}: HTTP {resp.status_code} (model unavailable)"
                 print(f"{last_reason} — trying next model")
                 break
