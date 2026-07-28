@@ -102,7 +102,9 @@ plausible in-scene (a sign, a placard, the name tags).
 
 BACKGROUND_RULE = """
 Real, physically plausible setting for the event, natural
-photographic depth of field.
+photographic depth of field. Actively depict the scene of the event
+itself as it happened — the actual moment, action, and location —
+not a generic backdrop with the event merely implied.
 """.strip()
 
 FALLBACK_EVENT = {
@@ -111,10 +113,15 @@ FALLBACK_EVENT = {
 }
 
 IMAGE_NOTE = """
-Barry and Susan wear small real props/costume pieces evoking the
-historical figures or setting of this event (tiny hat, scrap of
-period fabric, small prop), full costume. Other real
-pigeons may appear similarly dressed as extras. Aim for specific real individuals where possible.
+Barry and Susan wear full, detailed, historically accurate costume
+correctly and specifically identifying the real individual(s)
+central to this event — not a token prop or a single tiny
+accessory, but the complete recognizable outfit (e.g. for a monarch:
+full royal regalia, correct silhouette, headwear, jewellery, fabric
+and colours of the period and rank). If the event centres on a
+specific named person, dress Barry or Susan as that exact person,
+correctly and unmistakably. Other real pigeons may appear similarly
+dressed as extras playing other figures in the scene.
 """.strip()
 
 REGRET_WINNER_RULE = """
@@ -228,8 +235,9 @@ def build_image_prompt(event: dict) -> str:
     era_note = photo_era_note(event)
     return (
         f"{CHARACTER_BASE} {IMAGE_NOTE} {era_note} {COMIC_DEVICES_RULE} {BACKGROUND_RULE} "
-        f"Today's real historical event,{year_bit} to reference for "
-        f"costume and setting only: {event['text']}."
+        f"Today's real historical event to depict,{year_bit} accurately "
+        f"and specifically, costume, setting, and action all included: "
+        f"{event['text']}."
     )
 
 
