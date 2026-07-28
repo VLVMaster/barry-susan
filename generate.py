@@ -4,9 +4,7 @@ Generates today's Barry & Susan illustration + story, based on a real
 "on this day in history" event pulled from Wikipedia.
 
 Barry and Susan are dressed in attire appropriate to the event's era
-and appear as witnesses/onlookers to it. They are never depicted as,
-or made to resemble, any specific real historical individual — the
-event and its details are real and accurate; the pigeons are not.
+and appear as witnesses/onlookers to it. 
 
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
 
@@ -111,10 +109,11 @@ FALLBACK_EVENT = {
 }
 
 IMAGE_NOTE = """
-Barry and Susan wear small real props/costume pieces evoking the
+Barry and Susan wear real props/costume pieces evoking the
 historical figures or setting of this event (tiny hat, scrap of
 period fabric, small prop), full costume. Other real
 pigeons may appear similarly dressed as extras. Aim for specific real individuals where possible.
+The pigeons should depict the scene, outfit and all. 
 """.strip()
 
 REGRET_WINNER_RULE = """
