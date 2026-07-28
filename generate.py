@@ -10,10 +10,11 @@ event and its details are real and accurate; the pigeons are not.
 
 Run daily by the GitHub Action in .github/workflows/daily-image.yml
 
-- Image: Hugging Face Inference API (free tier, needs HF_TOKEN)
+- Image: Cloudflare Workers AI (free tier, needs CF_API_TOKEN)
 - Story: Groq (free tier, no credit card, needs GROQ_API_KEY)
 - History: Wikimedia on-this-day feed (free, no key)
 """
+import base64
 import json
 import os
 import random
@@ -24,23 +25,21 @@ from datetime import date, datetime, timezone
 import requests
 
 # Pollinations.ai went through several incompatible changes (anonymous
-# path 404ing, then requiring a pk_ key with an unfunded $0 balance) —
-# switched to Hugging Face's Inference API instead, which is free with
-# no payment required, just an HF_TOKEN. Which specific models the free
-# hf-inference provider serves has itself shifted more than once (a
-# hardcoded model list went from "works" to "three separate 400/410s"
-# within this same project), so the model to use is looked up at
-# request time from HF's own recommendation endpoint — the same
-# api/tasks lookup huggingface_hub's client uses internally when no
-# model is given — with a static list as a last-resort fallback.
-HF_TASKS_API_URL = "https://huggingface.co/api/tasks"
-HF_IMAGE_MODELS_FALLBACK = [
-    "stabilityai/stable-diffusion-xl-base-1.0",
-    "runwayml/stable-diffusion-v1-5",
-    "CompVis/stable-diffusion-v1-4",
+# path 404ing, then requiring a pk_ key with an unfunded $0 balance),
+# then Hugging Face's free hf-inference providers stopped serving every
+# text-to-image model we tried (400/410 across the board) — switched to
+# Cloudflare Workers AI, which has a real free daily allowance (10,000
+# neurons/day, one image is a few hundred) and a plain token-based REST
+# API. Several candidate models are tried in order since Workers AI's
+# model catalog has shifted before too.
+CF_API_BASE = "https://api.cloudflare.com/client/v4"
+CF_IMAGE_MODELS = [
+    "@cf/black-forest-labs/flux-1-schnell",
+    "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+    "@cf/bytedance/stable-diffusion-xl-lightning",
 ]
-HF_ROUTER_URL = "https://router.huggingface.co/hf-inference/models/{model}"
-HF_TOKEN = os.environ.get("HF_TOKEN")
+CF_API_TOKEN = os.environ.get("CF_API_TOKEN")
+CF_ACCOUNT_ID = os.environ.get("CF_ACCOUNT_ID")
 ONTHISDAY_URL = "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/{month}/{day}"
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -234,76 +233,76 @@ def build_image_prompt(event: dict) -> str:
     )
 
 
-def _fetch_recommended_hf_model() -> str | None:
-    """Ask HF which model it currently recommends for text-to-image —
-    the same api/tasks lookup huggingface_hub's own InferenceClient
-    does internally when no model is specified. Best-effort: returns
-    None on any failure so the caller falls back to the static list."""
-    try:
-        headers = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
-        resp = requests.get(HF_TASKS_API_URL, headers=headers, timeout=30)
-        resp.raise_for_status()
-        widget_models = resp.json().get("text-to-image", {}).get("widgetModels", [])
-        return widget_models[0] if widget_models else None
-    except Exception as e:
-        print(f"Could not fetch HF's recommended model, using fallback list: {e}")
-        return None
+def _cf_account_id() -> str:
+    """Return the Cloudflare account ID to run models against. Uses
+    CF_ACCOUNT_ID if set, otherwise looks up the token's first
+    accessible account (a scoped API token normally only has one)."""
+    if CF_ACCOUNT_ID:
+        return CF_ACCOUNT_ID
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}"}
+    resp = requests.get(f"{CF_API_BASE}/accounts", headers=headers, timeout=30)
+    resp.raise_for_status()
+    accounts = resp.json().get("result", [])
+    if not accounts:
+        raise RuntimeError("CF_API_TOKEN has no accessible Cloudflare accounts")
+    return accounts[0]["id"]
 
 
-def _query_hf_image(prompt: str, max_attempts: int = 3) -> bytes:
-    """POST the prompt to HF's Inference API, trying each candidate
-    model in turn (HF's own current recommendation first, then the
-    static fallback list). A 404/410, or a 400 saying the model isn't
-    supported by this provider, means that model is gone — move on to
-    the next one rather than retrying a dead model. A 503 means the
-    model is cold-starting, which HF reports with an estimated_time to
-    wait before retrying the same model."""
-    if not HF_TOKEN:
-        raise RuntimeError("HF_TOKEN not set")
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+def _query_cf_image(prompt: str, max_attempts: int = 3) -> bytes:
+    """POST the prompt to Cloudflare Workers AI, trying each candidate
+    model in turn. A 400/404 naming the model as unknown/unauthorized
+    means that model isn't available on this account — move on to the
+    next one. A 429 means rate-limited, worth backing off and retrying
+    the same model. Workers AI responses are either the raw image
+    bytes (Content-Type: image/*) or a JSON envelope with a base64
+    image string, depending on the model."""
+    if not CF_API_TOKEN:
+        raise RuntimeError("CF_API_TOKEN not set")
+    account_id = _cf_account_id()
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"}
     last_reason = None
 
-    recommended = _fetch_recommended_hf_model()
-    models = ([recommended] if recommended else []) + [
-        m for m in HF_IMAGE_MODELS_FALLBACK if m != recommended
-    ]
-
-    for model in models:
-        url = HF_ROUTER_URL.format(model=model)
+    for model in CF_IMAGE_MODELS:
+        url = f"{CF_API_BASE}/accounts/{account_id}/ai/run/{model}"
         for attempt in range(1, max_attempts + 1):
-            resp = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=120)
+            resp = requests.post(url, headers=headers, json={"prompt": prompt}, timeout=120)
             content_type = resp.headers.get("Content-Type", "")
 
-            not_supported = resp.status_code == 400 and "not supported" in resp.text.lower()
-            if resp.status_code in (404, 410) or not_supported:
-                last_reason = f"{model}: HTTP {resp.status_code} (model unavailable)"
+            if resp.status_code in (400, 404):
+                last_reason = f"{model}: HTTP {resp.status_code} — {resp.text[:300]}"
                 print(f"{last_reason} — trying next model")
                 break
-            elif resp.status_code == 503:
-                try:
-                    wait = float(resp.json().get("estimated_time", 20))
-                except Exception:
-                    wait = 20
-                print(f"{model}: model is loading (503), waiting {wait:.0f}s...")
+            elif resp.status_code == 429:
+                wait = 5 * attempt
+                print(f"{model}: rate-limited (429), waiting {wait}s...")
                 time.sleep(wait)
                 continue
             elif resp.status_code != 200:
                 last_reason = f"{model}: HTTP {resp.status_code}"
                 print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
                 print(f"Response body: {resp.text[:500]}")
-            elif not content_type.startswith("image/"):
-                last_reason = f"{model}: non-image response (Content-Type: {content_type})"
-                print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
-                print(f"Response body: {resp.text[:500]}")
-            else:
+            elif content_type.startswith("image/"):
                 print(f"Got a valid image from {model}: {content_type}, {len(resp.content)} bytes")
                 return resp.content
+            else:
+                try:
+                    data = resp.json()
+                    b64 = data["result"]["image"]
+                    if "," in b64[:40]:  # strip a data:image/...;base64, prefix if present
+                        b64 = b64.split(",", 1)[1]
+                    image_bytes = base64.b64decode(b64)
+                    print(f"Got a valid image from {model}: decoded {len(image_bytes)} bytes")
+                    return image_bytes
+                except Exception as e:
+                    last_reason = f"{model}: could not parse JSON image response: {e}"
+                    print(f"Attempt {attempt}/{max_attempts} failed: {last_reason}")
+                    print(f"Response body: {resp.text[:500]}")
 
             wait = 5 * attempt
             print(f"Retrying in {wait}s...")
             time.sleep(wait)
 
-    raise RuntimeError(f"Gave up on all HF models. Last reason: {last_reason}")
+    raise RuntimeError(f"Gave up on all Cloudflare Workers AI models. Last reason: {last_reason}")
 
 
 def _groq_post_with_retry(payload: dict, max_attempts: int = 4) -> dict:
@@ -340,7 +339,7 @@ def generate_image(prompt: str) -> bytes:
     if len(prompt) > MAX_PROMPT_CHARS:
         print(f"Prompt is {len(prompt)} chars, trimming to {MAX_PROMPT_CHARS}")
         prompt = prompt[:MAX_PROMPT_CHARS]
-    return _query_hf_image(prompt)
+    return _query_cf_image(prompt)
 
 
 def generate_story(event: dict) -> dict:
